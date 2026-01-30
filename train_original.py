@@ -29,18 +29,14 @@ def evaluate(global_step, net, testloader, run, savedir):
             save_results(ckpt, vnames, eval_label_list, video_saves)
 
     net.train()
-    
     ckpt.compute_metrics()
 
     log_dict = {}
     string = ""
     for k, v in ckpt.metrics.items():
-        # Format output string (only show overall metrics in console)
-        if '/' not in k or k.startswith('F1@'):
-            string += "%s:%.1f, " % (k, v)
+        string += "%s:%.1f, " % (k, v)
         log_dict[f'test-metric/{k}'] = v
     print(string + '\n')
-    
     if run is not None:
         run.log(log_dict, step=global_step+1)
 

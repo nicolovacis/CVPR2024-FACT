@@ -8,7 +8,7 @@ _C.aux.gpu = 0
 _C.aux.mark = "" # for adding addtional note
 _C.aux.runid = 0 # the X-th run of this configuration
 _C.aux.debug = False
-_C.aux.wandb_project = "fact_stanford_nv"
+_C.aux.wandb_project = "fact_breakfast_nv"
 _C.aux.wandb_user = "nvaci-university-of-illinois-chicago"
 _C.aux.wandb_offline = False
 _C.aux.logroot = "/data-8tb/nvaci/dataset_FACT/FACT_runs" 
@@ -17,12 +17,10 @@ _C.aux.eval_every = 1000
 _C.aux.print_every = 200
 
 # dataset
-_C.dataset = "stanford"
+_C.dataset = "breakfast"
 _C.split = "split1"
 _C.sr = 1 # temporal down-sample rate
 _C.eval_bg = False # if including background frame in evaluation
-
-_C.num_classes = 4  # Stanford has 4 classes
 
 # create dataset config variables to allow flexible dataset loading
 # if configs for <_C.dataset> cannot be found at utils/dataset.py
@@ -38,7 +36,7 @@ _C.average_transcript_len = 0.0 # average number of segments in
 # training
 _C.batch_size = 4
 _C.optimizer = "SGD"
-_C.epoch = 50
+_C.epoch = 2
 _C.lr = 0.1
 _C.lr_decay = -1
 _C.momentum = 0.009

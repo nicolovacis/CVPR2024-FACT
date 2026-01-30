@@ -207,11 +207,14 @@ def setup_cfg(cfg_file=[], set_cfgs=None, default: CfgNode=None, logdir="log/") 
     cfg.aux.exp = generate_expname(cfg, default=default)
 
     # create name of logdir
-    logdir = logdir if not cfg.aux.debug else "log_test/"
+    """logdir = logdir if not cfg.aux.debug else "log_test/"
     logdir = os.path.join(logdir, cfg.dataset, cfg.split,
                                     cfg.aux.exp, str(cfg.aux.runid))
-    logdir = logdir.replace('-', '_') 
-
+    logdir = logdir.replace('-', '_') """
+    # -- NEW
+    logroot = cfg.aux.logroot
+    logdir = os.path.join(logroot, cfg.dataset, cfg.split, cfg.aux.exp, str(cfg.aux.runid))
+    # --
     cfg.aux.logdir = logdir
     return cfg
 

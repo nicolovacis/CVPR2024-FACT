@@ -1,47 +1,214 @@
-import torch
-from tqdm import tqdm
-from .configs.utils import get_cfg_defaults
-from .utils.dataset import create_dataset, DataLoader
-from .utils import utils
-from .utils.evaluate import Checkpoint, Video
-from .utils.train_tools import save_results
+import numpy as np
+from collections import OrderedDict
+import pickle
+import gzip
+from .utils import expand_frame_label, parse_label, easy_reduce
 
+def levenstein(p, y, norm=False):
+    m_row = len(p)    
+    n_col = len(y)
+    D = np.zeros([m_row+1, n_col+1], np.float64)
+    for i in range(m_row+1):
+        D[i, 0] = i
+    for i in range(n_col+1):
+        D[0, i] = i
 
-for dataset_name, n_splits in [
-        ['gtea', 4], ['breakfast', 4], ['egoprocel', 1], ['epic-kitchens', 1]
-    ]:
-    print(dataset_name)
-    cfg = get_cfg_defaults()
-    cfg.merge_from_file(f'./src/configs/{dataset_name}.yaml')
+    for j in range(1, n_col+1):
+        for i in range(1, m_row+1):
+            if y[j-1] == p[i-1]:
+                D[i, j] = D[i-1, j-1]
+            else:
+                D[i, j] = min(D[i-1, j] + 1,
+                              D[i, j-1] + 1,
+                              D[i-1, j-1] + 1)
+    
+    if norm:
+        score = (1 - D[-1, -1]/max(m_row, n_col)) * 100
+    else:
+        score = D[-1, -1]
 
-    ckpts = []
-    for split in range(1, n_splits+1):
-        cfg.split = f"split{split}"
-        dataset, test_dataset = create_dataset(cfg)
+    return score
 
-        if dataset_name == 'epic-kitchens':
-            from .models.blocks_SepVerbNoun import FACT
-            model = FACT(cfg, dataset.input_dimension)
+def segs_to_labels_start_end_time(seg_list, bg_class):
+    seg_list = [ s for s in seg_list if s.action not in bg_class ]
+    labels = [ p.action for p in seg_list ]
+    start  = [ p.start for p in seg_list ]
+    end    = [ p.end+1 for p in seg_list ]
+    return labels, start, end
+
+def edit_score(pred_segs, gt_segs, norm=True, bg_class=["background"]):
+    P, _, _ = segs_to_labels_start_end_time(pred_segs, bg_class)
+    Y, _, _ = segs_to_labels_start_end_time(gt_segs, bg_class)
+    return levenstein(P, Y, norm)
+
+def f_score(pred_segs, gt_segs, overlap, bg_class=["background"]):
+    p_label, p_start, p_end = segs_to_labels_start_end_time(pred_segs, bg_class)
+    y_label, y_start, y_end = segs_to_labels_start_end_time(gt_segs, bg_class)
+
+    tp = 0
+    fp = 0
+
+    hits = np.zeros(len(y_label))
+
+    for j in range(len(p_label)):
+        intersection = np.minimum(p_end[j], y_end) - np.maximum(p_start[j], y_start)
+        union = np.maximum(p_end[j], y_end) - np.minimum(p_start[j], y_start)
+        IoU = (1.0*intersection / union)*([p_label[j] == y_label[x] for x in range(len(y_label))])
+        idx = np.array(IoU).argmax()
+
+        if IoU[idx] >= overlap and not hits[idx]:
+            tp += 1
+            hits[idx] = 1
         else:
-            from .models.blocks import FACT 
-            model = FACT(cfg, dataset.input_dimension, dataset.nclasses)
-        weights = f'./ckpts/{dataset_name}/split{split}-weight.pth'
-        weights = torch.load(weights, map_location='cpu')
-        if 'frame_pe.pe' in weights:
-            del weights['frame_pe.pe']
-        model.load_state_dict(weights, strict=False)
-        model.eval().cuda()
+            fp += 1
+
+    fn = len(y_label) - sum(hits)
+
+    return float(tp), float(fp), float(fn)
 
 
-        ckpt = Checkpoint(-1, bg_class=([] if cfg.eval_bg else dataset.bg_class))
-        loader  = DataLoader(test_dataset, 1, shuffle=False)
-        for vname, batch_seq, train_label_list, eval_label in tqdm(loader):
-            seq_list = [ s.cuda() for s in batch_seq ]
-            train_label_list = [ s.cuda() for s in train_label_list ]
-            video_saves = model(seq_list, train_label_list)
-            save_results(ckpt, vname, eval_label, video_saves)
+class Video():
+    
+    def __init__(self, vname='', **kwargs):
+        self.vname = vname
+        for k, v in kwargs.items():
+            setattr(self, k, v)
+    
+    def __str__(self):
+        return "< Video %s >" % self.vname
 
-        ckpt.compute_metrics()
-        ckpts.append(ckpt)
+    def __repr__(self):
+        return "< Video %s >" % self.vname
 
-    print(utils.easy_reduce([c.metrics for c in ckpts]))
+class Checkpoint():
+    def __init__(self, iteration, bg_class=[], eval_edit=True):
+        self.iteration = iteration
+        self.videos = {}
+
+        self.bg_class = bg_class
+        self.eval_edit = eval_edit # turn off this can save computation time
+
+    def add_videos(self, videos: list):
+        for v in videos:
+            self.videos[v.vname] = v
+
+    @staticmethod
+    def load(fname):
+        with gzip.open(fname, 'rb') as fp:
+            ckpt = pickle.load(fp)
+        return ckpt
+    
+    def save(self, fname):
+        self.fname = fname
+        with gzip.open(fname, 'wb') as fp:
+            pickle.dump(self, fp)
+
+    def __str__(self):
+        return "< Checkpoint[%d] %d videos >" % (self.iteration, len(self.videos))
+
+    def __repr__(self):
+        return str(self)
+
+    def _random_video(self):
+        vnames = list(self.videos.keys())
+        vname = np.random.choice(vnames, 1).item()
+        return vname, self.videos[vname]
+
+    def average_losses(self):
+        losses = [v.loss for v in self.videos.values()]
+        self.loss = easy_reduce(losses, mode='mean')
+
+    def _per_video_metrics(self, gt_label, pred_label):
+
+        M = OrderedDict()
+
+        if self.eval_edit:
+            pred_segs = parse_label(pred_label)
+            gt_segs = parse_label(gt_label)
+            M['Edit'] = edit_score(pred_segs, gt_segs, bg_class=self.bg_class)
+
+        return M
+
+    def _joint_metrics(self, gt_list, pred_list):
+        M = OrderedDict()
+
+        # framewise accuracy
+        gt_ = np.concatenate(gt_list)
+        pred_ = np.concatenate(pred_list)
+
+        correct = (gt_ == pred_)
+        fg_loc = np.array([ True if g not in self.bg_class else False for g in gt_ ])
+        M['AccB'] = correct.mean() * 100 # accuracy including background frames
+        M['Acc'] = correct[fg_loc].mean() * 100 # accuracy without background frames
+
+        # F1-Score
+        overlap = [.1, .25, .5]
+        tp, fp, fn = np.zeros(3), np.zeros(3), np.zeros(3)
+
+        for gt, pred in zip(gt_list, pred_list):
+            gt_segs = parse_label(gt)
+            pred_segs = parse_label(pred)
+            for s in range(len(overlap)):
+                tp1, fp1, fn1 = f_score(pred_segs, gt_segs, overlap[s], bg_class=self.bg_class)
+                tp[s] += tp1
+                fp[s] += fp1
+                fn[s] += fn1
+
+        for s in range(len(overlap)):
+            precision = tp[s] / float(tp[s]+fp[s]+1e-5)
+            recall = tp[s] / float(tp[s]+fn[s]+1e-5)
+            f1 = 2.0 * (precision*recall) / (precision+recall+1e-5)
+            f1 = np.nan_to_num(f1)*100
+            M['F1@%0.2f' % overlap[s]] = f1
+
+        return M
+
+    def _per_class_metrics(self, gt_list, pred_list, class_names):
+        """Compute per-class precision, recall, F1"""
+        gt_all = np.concatenate(gt_list)
+        pred_all = np.concatenate(pred_list)
+        
+        per_class_metrics = {}
+        num_classes = len(class_names)
+        
+        for i, class_name in enumerate(class_names):
+            # True positives, false positives, false negatives for this class
+            tp = np.sum((gt_all == i) & (pred_all == i))
+            fp = np.sum((gt_all != i) & (pred_all == i))
+            fn = np.sum((gt_all == i) & (pred_all != i))
+            tn = np.sum((gt_all != i) & (pred_all != i))
+            
+            # Compute metrics
+            precision = tp / (tp + fp + 1e-10) * 100
+            recall = tp / (tp + fn + 1e-10) * 100
+            f1 = 2 * precision * recall / (precision + recall + 1e-10)
+            accuracy = tp / (tp + fn + 1e-10) * 100
+            
+            per_class_metrics[f'{class_name}/precision'] = precision
+            per_class_metrics[f'{class_name}/recall'] = recall
+            per_class_metrics[f'{class_name}/f1'] = f1
+            per_class_metrics[f'{class_name}/accuracy'] = accuracy
+            per_class_metrics[f'{class_name}/support'] = int(tp + fn)
+        
+        return per_class_metrics
+
+    def compute_metrics(self, class_names=None):
+
+        gt_list, pred_list = [], [] 
+        for vname, video in self.videos.items():
+            video.pred_label = expand_frame_label(video.pred, len(video.gt_label)) # adjust for downsampling
+            video.metrics = self._per_video_metrics(video.gt_label, video.pred_label)
+            gt_list.append(video.gt_label)
+            pred_list.append(video.pred_label)
+
+        metrics = [ video.metrics for video in self.videos.values() ]
+        self.metrics = easy_reduce(metrics, skip_nan=True)
+        m = self._joint_metrics(gt_list, pred_list)
+        self.metrics.update(m)
+        
+        # Add per-class metrics if class names provided
+        if class_names is not None:
+            per_class_m = self._per_class_metrics(gt_list, pred_list, class_names)
+            self.metrics.update(per_class_m)
+
+        return self.metrics

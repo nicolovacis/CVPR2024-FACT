@@ -14,8 +14,9 @@ from .home import get_project_base
 from .configs.utils import cfg2flatdict, setup_cfg
 from .utils.train_tools import resume_ckpt, compute_null_weight, save_results
 from .models.loss import MatchCriterion
+from .utils.visualize_temporal_segmentation import plot_multiple_videos_summary
 
-def evaluate(global_step, net, testloader, run, savedir):
+def evaluate(global_step, net, testloader, run, savedir, logdir=None, visualize=True):
     print("TESTING" + "~"*10)
 
     ckpt = Checkpoint(global_step+1, bg_class=([] if net.cfg.eval_bg else testloader.dataset.bg_class))
@@ -46,6 +47,23 @@ def evaluate(global_step, net, testloader, run, savedir):
 
     fname = "%d.gz" % (global_step+1) 
     ckpt.save(os.path.join(savedir, fname))
+
+    # Generate temporal segmentation visualizations
+    if visualize and logdir is not None:
+        try:
+            vis_dir = os.path.join(logdir, 'visualizations', f'iter_{global_step+1}')
+            class_names = ['background', 'licking']  # For Stanford binary dataset
+            print(f"\nGenerating temporal segmentation visualizations...")
+            plot_multiple_videos_summary(
+                checkpoint=ckpt,
+                save_dir=vis_dir,
+                class_names=class_names,
+                max_videos=None,  # Plot all test videos
+                max_frames_per_video=None  # Show all frames
+            )
+            print(f"✓ Visualizations saved to: {vis_dir}\n")
+        except Exception as e:
+            print(f"Warning: Failed to generate visualizations: {e}\n")
 
     return ckpt
 
@@ -197,9 +215,10 @@ if __name__ == '__main__':
 
                 ckpt = Checkpoint(-1, bg_class=([] if net.cfg.eval_bg else testloader.dataset.bg_class), eval_edit=False)
 
+
             # test and save model every x iterations
             if global_step != 0 and (global_step+1) % cfg.aux.eval_every == 0:
-                test_ckpt = evaluate(global_step, net, testloader, run, savedir)
+                test_ckpt = evaluate(global_step, net, testloader, run, savedir, logdir=logdir, visualize=True)
                 if test_ckpt.metrics['F1@0.50'] >= best_metric:
                     best_ckpt = test_ckpt
                     best_metric = test_ckpt.metrics['F1@0.50']
@@ -218,6 +237,23 @@ if __name__ == '__main__':
     best_ckpt.eval_edit = True
     best_ckpt.compute_metrics()
     best_ckpt.save(os.path.join(logdir, 'best_ckpt.gz'))
+    
+    # Generate final visualizations for best checkpoint
+    try:
+        final_vis_dir = os.path.join(logdir, 'visualizations', 'final_best')
+        class_names = ['background', 'licking']
+        print(f"\nGenerating final visualizations for best checkpoint...")
+        plot_multiple_videos_summary(
+            checkpoint=best_ckpt,
+            save_dir=final_vis_dir,
+            class_names=class_names,
+            max_videos=None,
+            max_frames_per_video=None
+        )
+        print(f"✓ Final visualizations saved to: {final_vis_dir}\n")
+    except Exception as e:
+        print(f"Warning: Failed to generate final visualizations: {e}\n")
+    
     if run is not None:
         run.finish()
 

@@ -2,7 +2,7 @@ import numpy as np
 from collections import OrderedDict
 import pickle
 import gzip
-from .utils import expand_frame_label, parse_label, easy_reduce
+from .utils import expand_frame_label, parse_label, easy_reduce, multilabel_to_composite, expand_frame_label_multilabel
 
 def levenstein(p, y, norm=False):
     m_row = len(p)    
@@ -167,10 +167,24 @@ class Checkpoint():
 
         gt_list, pred_list = [], [] 
         for vname, video in self.videos.items():
-            video.pred_label = expand_frame_label(video.pred, len(video.gt_label)) # adjust for downsampling
-            video.metrics = self._per_video_metrics(video.gt_label, video.pred_label)
-            gt_list.append(video.gt_label)
-            pred_list.append(video.pred_label)
+            # Handle multi-label case: check if labels are 2D
+            is_multilabel = (len(video.gt_label.shape) == 2 and video.gt_label.shape[1] > 1)
+            
+            if is_multilabel:
+                # Multi-label: expand each label dimension separately, then convert to composite
+                video.pred_label = expand_frame_label_multilabel(video.pred, len(video.gt_label))
+                # Convert to composite integers for segment-based metrics
+                gt_composite = multilabel_to_composite(video.gt_label)
+                pred_composite = multilabel_to_composite(video.pred_label)
+                video.metrics = self._per_video_metrics(gt_composite, pred_composite)
+                gt_list.append(gt_composite)
+                pred_list.append(pred_composite)
+            else:
+                # Standard single-label case
+                video.pred_label = expand_frame_label(video.pred, len(video.gt_label))
+                video.metrics = self._per_video_metrics(video.gt_label, video.pred_label)
+                gt_list.append(video.gt_label)
+                pred_list.append(video.pred_label)
 
         metrics = [ video.metrics for video in self.videos.values() ]
         self.metrics = easy_reduce(metrics, skip_nan=True)

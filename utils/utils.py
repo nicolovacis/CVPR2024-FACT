@@ -139,6 +139,66 @@ def to_numpy(x):
     else:
         return x
 
+def multilabel_to_composite(label):
+    """
+    Convert multi-label array to composite integer labels.
+    
+    Args:
+        label: (T, num_labels) binary array
+    
+    Returns:
+        (T,) array where each value is sum of 2^i for active labels
+        e.g., [0,0]->0, [1,0]->1, [0,1]->2, [1,1]->3
+    """
+    if len(label.shape) == 1:
+        # Already single label
+        return label
+    
+    num_labels = label.shape[1]
+    composite = np.zeros(label.shape[0], dtype=np.int64)
+    
+    for i in range(num_labels):
+        composite += label[:, i].astype(np.int64) * (2 ** i)
+    
+    return composite
+
+def expand_frame_label_multilabel(label, target_len: int):
+    """
+    Expand multi-label frame predictions to target length.
+    
+    Args:
+        label: (T, num_labels) array
+        target_len: target number of frames
+    
+    Returns:
+        (target_len, num_labels) array
+    """
+    if len(label) == target_len:
+        return label
+    
+    import torch
+    is_numpy = isinstance(label, np.ndarray)
+    if is_numpy:
+        label = torch.from_numpy(label).float()
+    
+    # For multi-label, resize each column independently
+    num_labels = label.shape[1]
+    resized_labels = []
+    
+    for i in range(num_labels):
+        col = label[:, i].view([1, 1, -1])
+        resized_col = torch.nn.functional.interpolate(
+            col, size=target_len, mode="nearest"
+        ).view(-1)
+        resized_labels.append(resized_col)
+    
+    resized = torch.stack(resized_labels, dim=1).long()
+    
+    if is_numpy:
+        resized = resized.detach().numpy()
+    
+    return resized
+
 def egoprocel_vname2dataset(vname):
     if 'tent' in vname: #EPIC
         return 'EPIC'

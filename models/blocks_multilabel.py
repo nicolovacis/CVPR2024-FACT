@@ -384,10 +384,11 @@ class UpdateBlockTDU(Block):
 
     def compute_loss(self, criterion: MultiLabelMatchCriterion, match=None):
         frame_loss = criterion.frame_loss(self.frame_clogit.squeeze(1))
-        seg_loss = criterion.frame_loss(self.seg_clogit.squeeze(1))
+        seg_loss = criterion.segment_loss(self.seg_clogit.squeeze(1), self.tdu)
         atk_loss = criterion.action_token_loss(match, self.action_clogit)
-        f2a_loss = criterion.cross_attn_loss(match, torch.transpose(self.f2a_attn_logit, 1, 2), dim=1)
-        a2f_loss = criterion.cross_attn_loss(match, self.a2f_attn_logit, dim=2)
+        # Use TDU-specific cross attention loss for segment-level attention
+        f2a_loss = criterion.cross_attn_loss_tdu(match, torch.transpose(self.f2a_attn_logit, 1, 2), self.tdu, dim=1)
+        a2f_loss = criterion.cross_attn_loss_tdu(match, self.a2f_attn_logit, self.tdu, dim=2)
 
         frame_clogit = torch.transpose(self.frame_clogit, 0, 1) 
         from .loss_multilabel import smooth_loss_multilabel

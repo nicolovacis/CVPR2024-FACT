@@ -104,6 +104,7 @@ class FACT(nn.Module):
 
         for i, (seq, label) in enumerate(zip(seq_list, label_list)):
             seq = seq.unsqueeze(1)
+            # label is now composite for transcript compatibility
             trans = torch_class_label_to_segment_label(label)[0]
             self._forward_one_video(seq, trans)
 
@@ -112,6 +113,8 @@ class FACT(nn.Module):
             save_list.append(save_data)
 
             if compute_loss:
+                # For loss, we need multi-label format
+                # Label is composite, we need to convert back
                 loss = self._loss_one_video(label)
                 final_loss.append(loss)
                 save_data['loss'] = { 'loss': loss.item() }

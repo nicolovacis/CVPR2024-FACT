@@ -146,7 +146,9 @@ def create_multilabel_dataset(cfg: CfgNode):
     train_split_fname = os.path.join(cfg.split_path, f'train.{cfg.split}.bundle')
     test_split_fname = os.path.join(cfg.split_path, f'test.{cfg.split}.bundle')
     feature_transpose = cfg.feature_transpose
-    bg_class = cfg.bg_class if isinstance(cfg.bg_class, list) else [cfg.bg_class]
+    # For multilabel, we don't use bg_class (background is implicit [0,0])
+    # But we keep it as empty list for compatibility with evaluation code
+    bg_class = []
     
     print("Loading Multi-Label Dataset")
     print("Loading Feature from", feature_path)

@@ -68,7 +68,7 @@ aux:
   runid: 0
 average_transcript_len: 149.375
 batch_size: 1
-bg_class: []
+bg_class: 0
 clip_grad_norm: 10.0
 dataset: stanford_multilabel
 num_classes: 2

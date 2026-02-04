@@ -2,17 +2,17 @@ nohup: ignoring input
 Warning: i3d_model.py not found, will use fallback feature extractor
 Set CPU thread limits to 4 threads
 ================================================================================
-STANFORD MULTI-LABEL DATASET PREPROCESSING (ORIGINAL FPS)
+STANFORD MULTI-LABEL DATASET PREPROCESSING (ORIGINAL FPS, BALANCED)
 Multi-label: Licking & Shaking (Independent Binary Outputs)
 ================================================================================
-Started at: 2026-02-03 21:38:07
+Started at: 2026-02-03 21:33:21
 
 Configuration:
   Input videos: /data-8tb/nvaci/dataset/dataset_Stanford/raw/videos_cut
   Input labels: /data-8tb/nvaci/dataset/dataset_Stanford/raw/labels
-  Output directory: /data-8tb/nvaci/dataset/dataset_Stanford/FACT_method/preprocessed_data_multilabel_originalFPS
+  Output directory: /data-8tb/nvaci/dataset/dataset_Stanford/FACT_method/preprocessed_data_multilabel_balanced_originalFPS
   Label format: Multi-label (licking AND shaking)
-  NO BALANCING - Dataset kept as-is
+  BALANCED - Downsampling background to match other classes
 
 Using GPU: NVIDIA RTX 6000 Ada Generation
 Loading pretrained I3D model...
@@ -31,7 +31,7 @@ Starting to process 32 videos...
 Processing video 1/32: ID01
 ================================================================================
 [ID01] Found label file: 25-021_ID01.csv
-[ID01] Step 1/3: Extracting features...
+[ID01] Step 1/4: Extracting features...
       Opening video file...
 
       ═══════════════════════════════════════════════════════
@@ -52,19 +52,3 @@ Processing video 1/32: ID01
       ───────────────────────────────────────────────────────
       Progress: 500/97552 frames (0.5%)
       Progress: 1000/97552 frames (1.0%)
-      Progress: 1500/97552 frames (1.5%)
-      Progress: 2000/97552 frames (2.1%)
-      Progress: 2500/97552 frames (2.6%)
-      Progress: 3000/97552 frames (3.1%)
-      Progress: 3500/97552 frames (3.6%)
-      Progress: 4000/97552 frames (4.1%)
-      Progress: 4500/97552 frames (4.6%)
-      Progress: 5000/97552 frames (5.1%)
-      Progress: 5500/97552 frames (5.6%)
-      Progress: 6000/97552 frames (6.2%)
-      Progress: 6500/97552 frames (6.7%)
-      Progress: 7000/97552 frames (7.2%)
-      Progress: 7500/97552 frames (7.7%)
-      Progress: 8000/97552 frames (8.2%)
-      Progress: 8500/97552 frames (8.7%)
-      Progress: 9000/97552 frames (9.2%)

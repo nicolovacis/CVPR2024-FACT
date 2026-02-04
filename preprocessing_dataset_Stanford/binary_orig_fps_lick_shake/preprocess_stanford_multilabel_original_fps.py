@@ -9,6 +9,11 @@ KEY FEATURES:
 - No balancing - keeps dataset as-is (unbalanced)
 - Outputs two separate sigmoid predictions instead of softmax
 - Background is implicit (when both licking=0 and shaking=0)
+
+FIXED VERSION:
+- Added consecutive failure limit to prevent infinite loops
+- Added timeout mechanism
+- Better error handling and diagnostics
 """
 
 import os
@@ -22,6 +27,7 @@ from tqdm import tqdm
 import torch
 import cv2
 from datetime import datetime
+import time
 
 # Set CPU thread limits early
 def set_cpu_threads(num_threads=4):
@@ -83,7 +89,11 @@ def load_i3d_model(device, weights_path=None):
 def extract_video_features_per_second(video_path, model, model_type, device, aggregation='mean'):
     """
     Extract features from video using ORIGINAL FPS, aggregating per second.
-    Same as binary_orig_fps version.
+    
+    FIXED VERSION:
+    - Added consecutive failure limit to prevent infinite loops
+    - Added timeout mechanism
+    - Better diagnostic logging
     """
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
@@ -125,6 +135,10 @@ def extract_video_features_per_second(video_path, model, model_type, device, agg
     frames_by_second = [[] for _ in range(num_seconds)]
     frame_count = 0
     missed_frames = 0
+    consecutive_failures = 0
+    MAX_CONSECUTIVE_FAILURES = 200
+    MAX_PROCESSING_TIME = 7200
+    start_time = time.time()
     
     transform = transforms.Compose([
         transforms.ToPILImage(),
@@ -134,12 +148,33 @@ def extract_video_features_per_second(video_path, model, model_type, device, agg
     ])
     
     while True:
+        # Check timeout
+        elapsed = time.time() - start_time
+        if elapsed > MAX_PROCESSING_TIME:
+            print(f"      WARNING: Processing timeout after {elapsed:.1f}s", flush=True)
+            print(f"      Breaking loop with {frame_count} frames read", flush=True)
+            break
+        
         ret, frame = cap.read()
         if not ret:
             missed_frames += 1
+            consecutive_failures += 1
+            
+            # Check consecutive failures
+            if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                print(f"      WARNING: {consecutive_failures} consecutive frame read failures", flush=True)
+                print(f"      Breaking loop at frame {frame_count}/{total_frames}", flush=True)
+                print(f"      Frames successfully read: {frame_count}", flush=True)
+                print(f"      Total missed frames: {missed_frames}", flush=True)
+                break
+            
+            # Original exit condition
             if frame_count >= total_frames:
                 break
             continue
+        
+        # Reset consecutive failures on successful read
+        consecutive_failures = 0
         
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         frame_tensor = transform(frame_rgb)
@@ -165,6 +200,9 @@ def extract_video_features_per_second(video_path, model, model_type, device, agg
     print(f"      Frames missing: {missed_frames}", flush=True)
     if missed_frames > 0:
         print(f"      WARNING: {missed_frames} frames could not be read!", flush=True)
+    if frame_count < total_frames:
+        print(f"      WARNING: Read fewer frames than expected ({frame_count}/{total_frames})", flush=True)
+        print(f"      This may be due to video corruption or codec issues", flush=True)
     print(f"      ───────────────────────────────────────────────────────", flush=True)
     print(f"", flush=True)
     sys.stdout.flush()
@@ -249,7 +287,7 @@ def extract_video_features_per_second(video_path, model, model_type, device, agg
     print(f"      FEATURE EXTRACTION COMPLETE", flush=True)
     print(f"      ───────────────────────────────────────────────────────", flush=True)
     print(f"      Final features shape: {features.shape}", flush=True)
-    print(f"      ═══════════════════════════════════════════════════════", flush=True)
+    print(f"", flush=True)
     sys.stdout.flush()
     
     return features
@@ -257,89 +295,78 @@ def extract_video_features_per_second(video_path, model, model_type, device, agg
 
 def convert_labels_to_multilabel(label_file, num_seconds):
     """
-    Convert CSV labels to multi-label format (licking AND shaking)
-    
-    KEY DIFFERENCE: Returns TWO binary labels per second instead of one categorical
-    
-    Args:
-        label_file: Path to CSV file
-        num_seconds: Expected number of seconds in video
+    Convert CSV labels to multi-label format with licking and shaking.
+    Each second gets TWO binary labels: [licking, shaking]
     
     Returns:
-        numpy array of shape (num_seconds, 2) with [licking, shaking] for each second
+        numpy array of shape (num_seconds, 2) with values 0 or 1
     """
     df = pd.read_csv(label_file)
     
-    print(f"      CSV columns: {df.columns.tolist()}")
-    print(f"      CSV shape: {df.shape}")
-    print(f"      Video seconds: {num_seconds}")
+    # Initialize multi-label array: (num_seconds, 2)
+    # Column 0: licking (0/1)
+    # Column 1: shaking (0/1)
+    multilabels = np.zeros((num_seconds, 2), dtype=np.int32)
     
-    # Initialize multi-label array: [licking, shaking]
-    multilabels = np.zeros((num_seconds, 2), dtype=np.float32)
-    
-    # Process each row (each row = 1 second)
-    for idx, row in df.iterrows():
-        if idx >= num_seconds:
-            break
+    for _, row in df.iterrows():
+        start_sec = int(row['start_sec'])
+        end_sec = int(row['end_sec'])
+        behavior = str(row['behavior']).strip().lower()
         
-        # Direct assignment - each label is independent
-        multilabels[idx, 0] = float(row['licking'])  # licking: 0 or 1
-        multilabels[idx, 1] = float(row['shaking'])  # shaking: 0 or 1
-    
-    # Statistics
-    n_licking = np.sum(multilabels[:, 0])
-    n_shaking = np.sum(multilabels[:, 1])
-    n_both = np.sum(np.logical_and(multilabels[:, 0] == 1, multilabels[:, 1] == 1))
-    n_neither = np.sum(np.logical_and(multilabels[:, 0] == 0, multilabels[:, 1] == 0))
-    
-    print(f"      Multi-label statistics:")
-    print(f"        Licking only: {int(n_licking - n_both)} seconds")
-    print(f"        Shaking only: {int(n_shaking - n_both)} seconds")
-    print(f"        Both licking AND shaking: {int(n_both)} seconds")
-    print(f"        Neither (background): {int(n_neither)} seconds")
-    print(f"        Total: {num_seconds} seconds")
-    sys.stdout.flush()
+        # Determine which label to set
+        if 'lick' in behavior:
+            label_idx = 0
+        elif 'shake' in behavior:
+            label_idx = 1
+        else:
+            continue
+        
+        # Mark all seconds in this range
+        for sec in range(start_sec, min(end_sec, num_seconds)):
+            multilabels[sec, label_idx] = 1
     
     return multilabels
 
 
-def create_mapping_file(mapping_file):
-    """Create mapping.txt file with multi-label format"""
-    with open(mapping_file, 'w') as f:
-        f.write("# Multi-label format: each second has 2 independent binary labels\n")
+def create_mapping_file(output_file):
+    """Create mapping.txt file for multi-label format"""
+    with open(output_file, 'w') as f:
         f.write("0 licking\n")
         f.write("1 shaking\n")
-    print(f"Created mapping file: {mapping_file}", flush=True)
+    print(f"\nCreated mapping file: {output_file}")
 
 
 def create_train_test_splits(video_ids, output_dir, train_ratio=0.8, n_splits=5, seed=42):
-    """Create train/test splits"""
+    """Create train/test split files"""
     splits_dir = output_dir / 'splits'
     splits_dir.mkdir(exist_ok=True)
     
     random.seed(seed)
+    n_videos = len(video_ids)
+    n_train = int(n_videos * train_ratio)
     
-    for split_idx in range(n_splits):
+    print(f"\nCreating {n_splits} train/test splits...")
+    print(f"  Train ratio: {train_ratio} ({n_train}/{n_videos} videos)")
+    
+    for split_idx in range(1, n_splits + 1):
         shuffled_ids = video_ids.copy()
         random.shuffle(shuffled_ids)
         
-        split_point = int(len(shuffled_ids) * train_ratio)
-        train_ids = shuffled_ids[:split_point]
-        test_ids = shuffled_ids[split_point:]
+        train_ids = shuffled_ids[:n_train]
+        test_ids = shuffled_ids[n_train:]
         
-        train_file = splits_dir / f'train.split{split_idx + 1}.bundle'
+        train_file = splits_dir / f'train.split{split_idx}.bundle'
+        test_file = splits_dir / f'test.split{split_idx}.bundle'
+        
         with open(train_file, 'w') as f:
-            for video_id in train_ids:
-                f.write(f"{video_id}\n")
+            for vid in train_ids:
+                f.write(f"{vid}\n")
         
-        test_file = splits_dir / f'test.split{split_idx + 1}.bundle'
         with open(test_file, 'w') as f:
-            for video_id in test_ids:
-                f.write(f"{video_id}\n")
+            for vid in test_ids:
+                f.write(f"{vid}\n")
         
-        print(f"Created split {split_idx + 1}:", flush=True)
-        print(f"  Train: {len(train_ids)} videos", flush=True)
-        print(f"  Test: {len(test_ids)} videos", flush=True)
+        print(f"  Split {split_idx}: {len(train_ids)} train, {len(test_ids)} test")
 
 
 def main():

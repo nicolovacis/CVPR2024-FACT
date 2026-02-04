@@ -9,6 +9,11 @@ KEY FEATURES:
 - BALANCED: Downsamples background to balance all classes
 - Outputs two separate sigmoid predictions instead of softmax
 - Background is implicit (when both licking=0 and shaking=0)
+
+FIXED VERSION:
+- Added consecutive failure limit to prevent infinite loops
+- Added timeout mechanism
+- Better error handling and diagnostics
 """
 
 import os
@@ -22,6 +27,7 @@ from tqdm import tqdm
 import torch
 import cv2
 from datetime import datetime
+import time
 
 # Set CPU thread limits early
 def set_cpu_threads(num_threads=4):
@@ -83,6 +89,11 @@ def load_i3d_model(device, weights_path=None):
 def extract_video_features_per_second(video_path, model, model_type, device, aggregation='mean'):
     """
     Extract features from video using ORIGINAL FPS, aggregating per second.
+    
+    FIXED VERSION:
+    - Added consecutive failure limit to prevent infinite loops
+    - Added timeout mechanism
+    - Better diagnostic logging
     """
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
@@ -124,6 +135,10 @@ def extract_video_features_per_second(video_path, model, model_type, device, agg
     frames_by_second = [[] for _ in range(num_seconds)]
     frame_count = 0
     missed_frames = 0
+    consecutive_failures = 0
+    MAX_CONSECUTIVE_FAILURES = 200
+    MAX_PROCESSING_TIME = 7200
+    start_time = time.time()
     
     transform = transforms.Compose([
         transforms.ToPILImage(),
@@ -133,12 +148,33 @@ def extract_video_features_per_second(video_path, model, model_type, device, agg
     ])
     
     while True:
+        # Check timeout
+        elapsed = time.time() - start_time
+        if elapsed > MAX_PROCESSING_TIME:
+            print(f"      WARNING: Processing timeout after {elapsed:.1f}s", flush=True)
+            print(f"      Breaking loop with {frame_count} frames read", flush=True)
+            break
+        
         ret, frame = cap.read()
         if not ret:
             missed_frames += 1
+            consecutive_failures += 1
+            
+            # Check consecutive failures
+            if consecutive_failures >= MAX_CONSECUTIVE_FAILURES:
+                print(f"      WARNING: {consecutive_failures} consecutive frame read failures", flush=True)
+                print(f"      Breaking loop at frame {frame_count}/{total_frames}", flush=True)
+                print(f"      Frames successfully read: {frame_count}", flush=True)
+                print(f"      Total missed frames: {missed_frames}", flush=True)
+                break
+            
+            # Original exit condition
             if frame_count >= total_frames:
                 break
             continue
+        
+        # Reset consecutive failures on successful read
+        consecutive_failures = 0
         
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         frame_tensor = transform(frame_rgb)
@@ -164,6 +200,9 @@ def extract_video_features_per_second(video_path, model, model_type, device, agg
     print(f"      Frames missing: {missed_frames}", flush=True)
     if missed_frames > 0:
         print(f"      WARNING: {missed_frames} frames could not be read!", flush=True)
+    if frame_count < total_frames:
+        print(f"      WARNING: Read fewer frames than expected ({frame_count}/{total_frames})", flush=True)
+        print(f"      This may be due to video corruption or codec issues", flush=True)
     print(f"      ───────────────────────────────────────────────────────", flush=True)
     print(f"", flush=True)
     sys.stdout.flush()

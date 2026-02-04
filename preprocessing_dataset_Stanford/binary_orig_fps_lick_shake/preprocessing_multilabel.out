@@ -1586,3 +1586,681 @@ Processing video 6/32: ID06
       Progress: 73000/96688 frames (75.5%)
       Progress: 73500/96688 frames (76.0%)
       Progress: 74000/96688 frames (76.5%)
+      Progress: 74500/96688 frames (77.1%)
+      Progress: 75000/96688 frames (77.6%)
+      Progress: 75500/96688 frames (78.1%)
+      Progress: 76000/96688 frames (78.6%)
+      Progress: 76500/96688 frames (79.1%)
+      Progress: 77000/96688 frames (79.6%)
+      Progress: 77500/96688 frames (80.2%)
+      Progress: 78000/96688 frames (80.7%)
+      Progress: 78500/96688 frames (81.2%)
+      Progress: 79000/96688 frames (81.7%)
+      Progress: 79500/96688 frames (82.2%)
+      Progress: 80000/96688 frames (82.7%)
+      Progress: 80500/96688 frames (83.3%)
+      Progress: 81000/96688 frames (83.8%)
+      Progress: 81500/96688 frames (84.3%)
+      Progress: 82000/96688 frames (84.8%)
+      Progress: 82500/96688 frames (85.3%)
+      Progress: 83000/96688 frames (85.8%)
+      Progress: 83500/96688 frames (86.4%)
+      Progress: 84000/96688 frames (86.9%)
+      Progress: 84500/96688 frames (87.4%)
+      Progress: 85000/96688 frames (87.9%)
+      Progress: 85500/96688 frames (88.4%)
+      Progress: 86000/96688 frames (88.9%)
+      Progress: 86500/96688 frames (89.5%)
+      Progress: 87000/96688 frames (90.0%)
+      Progress: 87500/96688 frames (90.5%)
+      Progress: 88000/96688 frames (91.0%)
+      Progress: 88500/96688 frames (91.5%)
+      Progress: 89000/96688 frames (92.0%)
+      Progress: 89500/96688 frames (92.6%)
+      Progress: 90000/96688 frames (93.1%)
+      Progress: 90500/96688 frames (93.6%)
+      Progress: 91000/96688 frames (94.1%)
+      Progress: 91500/96688 frames (94.6%)
+      Progress: 92000/96688 frames (95.2%)
+      Progress: 92500/96688 frames (95.7%)
+      Progress: 93000/96688 frames (96.2%)
+      Progress: 93500/96688 frames (96.7%)
+      Progress: 94000/96688 frames (97.2%)
+      Progress: 94500/96688 frames (97.7%)
+      Progress: 95000/96688 frames (98.3%)
+      Progress: 95500/96688 frames (98.8%)
+      Progress: 96000/96688 frames (99.3%)
+      Progress: 96500/96688 frames (99.8%)
+      ───────────────────────────────────────────────────────
+      FRAME READING COMPLETE
+      ───────────────────────────────────────────────────────
+      Expected frames: 96688
+      Frames read: 96688
+      Frames missing: 1
+      WARNING: 1 frames could not be read!
+      ───────────────────────────────────────────────────────
+
+      ───────────────────────────────────────────────────────
+      EXTRACTING FEATURES PER SECOND
+      ───────────────────────────────────────────────────────
+      Total seconds to process: 3868
+        Second 100/3868
+        Second 200/3868
+        Second 300/3868
+        Second 400/3868
+        Second 500/3868
+        Second 600/3868
+        Second 700/3868
+        Second 800/3868
+        Second 900/3868
+        Second 1000/3868
+        Second 1100/3868
+        Second 1200/3868
+        Second 1300/3868
+        Second 1400/3868
+        Second 1500/3868
+        Second 1600/3868
+        Second 1700/3868
+        Second 1800/3868
+        Second 1900/3868
+        Second 2000/3868
+        Second 2100/3868
+        Second 2200/3868
+        Second 2300/3868
+        Second 2400/3868
+        Second 2500/3868
+        Second 2600/3868
+        Second 2700/3868
+        Second 2800/3868
+        Second 2900/3868
+        Second 3000/3868
+        Second 3100/3868
+        Second 3200/3868
+        Second 3300/3868
+        Second 3400/3868
+        Second 3500/3868
+        Second 3600/3868
+        Second 3700/3868
+        Second 3800/3868
+      ───────────────────────────────────────────────────────
+      FEATURE EXTRACTION COMPLETE
+      ───────────────────────────────────────────────────────
+      Final features shape: (3868, 512)
+
+[ID06]   Features extracted: (3868, 512)
+[ID06] Step 2/3: Converting to multi-label format...
+/data-8tb/nvaci/miniconda3/envs/FACT/lib/python3.8/site-packages/torchvision/models/_utils.py:208: UserWarning: The parameter 'pretrained' is deprecated since 0.13 and may be removed in the future, please use 'weights' instead.
+  warnings.warn(
+/data-8tb/nvaci/miniconda3/envs/FACT/lib/python3.8/site-packages/torchvision/models/_utils.py:223: UserWarning: Arguments other than a weight enum or `None` for 'weights' are deprecated since 0.13 and may be removed in the future. The current behavior is equivalent to passing `weights=R3D_18_Weights.KINETICS400_V1`. You can also use `weights=R3D_18_Weights.DEFAULT` to get the most up-to-date weights.
+  warnings.warn(msg)
+Traceback (most recent call last):
+  File "/data-8tb/nvaci/miniconda3/envs/FACT/lib/python3.8/site-packages/pandas/core/indexes/base.py", line 3080, in get_loc
+    return self._engine.get_loc(casted_key)
+  File "pandas/_libs/index.pyx", line 70, in pandas._libs.index.IndexEngine.get_loc
+  File "pandas/_libs/index.pyx", line 101, in pandas._libs.index.IndexEngine.get_loc
+  File "pandas/_libs/hashtable_class_helper.pxi", line 4554, in pandas._libs.hashtable.PyObjectHashTable.get_item
+  File "pandas/_libs/hashtable_class_helper.pxi", line 4562, in pandas._libs.hashtable.PyObjectHashTable.get_item
+KeyError: 'start_sec'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "preprocess_stanford_multilabel_original_fps.py", line 500, in main
+    multilabels = convert_labels_to_multilabel(label_file, num_seconds)
+  File "preprocess_stanford_multilabel_original_fps.py", line 312, in convert_labels_to_multilabel
+    start_sec = int(row['start_sec'])
+  File "/data-8tb/nvaci/miniconda3/envs/FACT/lib/python3.8/site-packages/pandas/core/series.py", line 853, in __getitem__
+    return self._get_value(key)
+  File "/data-8tb/nvaci/miniconda3/envs/FACT/lib/python3.8/site-packages/pandas/core/series.py", line 961, in _get_value
+    loc = self.index.get_loc(label)
+  File "/data-8tb/nvaci/miniconda3/envs/FACT/lib/python3.8/site-packages/pandas/core/indexes/base.py", line 3082, in get_loc
+    raise KeyError(key) from err
+KeyError: 'start_sec'
+Traceback (most recent call last):
+  File "/data-8tb/nvaci/miniconda3/envs/FACT/lib/python3.8/site-packages/pandas/core/indexes/base.py", line 3080, in get_loc
+    return self._engine.get_loc(casted_key)
+  File "pandas/_libs/index.pyx", line 70, in pandas._libs.index.IndexEngine.get_loc
+  File "pandas/_libs/index.pyx", line 101, in pandas._libs.index.IndexEngine.get_loc
+  File "pandas/_libs/hashtable_class_helper.pxi", line 4554, in pandas._libs.hashtable.PyObjectHashTable.get_item
+  File "pandas/_libs/hashtable_class_helper.pxi", line 4562, in pandas._libs.hashtable.PyObjectHashTable.get_item
+KeyError: 'start_sec'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "preprocess_stanford_multilabel_original_fps.py", line 500, in main
+    multilabels = convert_labels_to_multilabel(label_file, num_seconds)
+  File "preprocess_stanford_multilabel_original_fps.py", line 312, in convert_labels_to_multilabel
+    start_sec = int(row['start_sec'])
+  File "/data-8tb/nvaci/miniconda3/envs/FACT/lib/python3.8/site-packages/pandas/core/series.py", line 853, in __getitem__
+    return self._get_value(key)
+  File "/data-8tb/nvaci/miniconda3/envs/FACT/lib/python3.8/site-packages/pandas/core/series.py", line 961, in _get_value
+    loc = self.index.get_loc(label)
+  File "/data-8tb/nvaci/miniconda3/envs/FACT/lib/python3.8/site-packages/pandas/core/indexes/base.py", line 3082, in get_loc
+    raise KeyError(key) from err
+KeyError: 'start_sec'
+Traceback (most recent call last):
+  File "/data-8tb/nvaci/miniconda3/envs/FACT/lib/python3.8/site-packages/pandas/core/indexes/base.py", line 3080, in get_loc
+    return self._engine.get_loc(casted_key)
+  File "pandas/_libs/index.pyx", line 70, in pandas._libs.index.IndexEngine.get_loc
+  File "pandas/_libs/index.pyx", line 101, in pandas._libs.index.IndexEngine.get_loc
+  File "pandas/_libs/hashtable_class_helper.pxi", line 4554, in pandas._libs.hashtable.PyObjectHashTable.get_item
+  File "pandas/_libs/hashtable_class_helper.pxi", line 4562, in pandas._libs.hashtable.PyObjectHashTable.get_item
+KeyError: 'start_sec'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "preprocess_stanford_multilabel_original_fps.py", line 500, in main
+    multilabels = convert_labels_to_multilabel(label_file, num_seconds)
+  File "preprocess_stanford_multilabel_original_fps.py", line 312, in convert_labels_to_multilabel
+    start_sec = int(row['start_sec'])
+  File "/data-8tb/nvaci/miniconda3/envs/FACT/lib/python3.8/site-packages/pandas/core/series.py", line 853, in __getitem__
+    return self._get_value(key)
+  File "/data-8tb/nvaci/miniconda3/envs/FACT/lib/python3.8/site-packages/pandas/core/series.py", line 961, in _get_value
+    loc = self.index.get_loc(label)
+  File "/data-8tb/nvaci/miniconda3/envs/FACT/lib/python3.8/site-packages/pandas/core/indexes/base.py", line 3082, in get_loc
+    raise KeyError(key) from err
+KeyError: 'start_sec'
+Traceback (most recent call last):
+  File "/data-8tb/nvaci/miniconda3/envs/FACT/lib/python3.8/site-packages/pandas/core/indexes/base.py", line 3080, in get_loc
+    return self._engine.get_loc(casted_key)
+  File "pandas/_libs/index.pyx", line 70, in pandas._libs.index.IndexEngine.get_loc
+  File "pandas/_libs/index.pyx", line 101, in pandas._libs.index.IndexEngine.get_loc
+  File "pandas/_libs/hashtable_class_helper.pxi", line 4554, in pandas._libs.hashtable.PyObjectHashTable.get_item
+  File "pandas/_libs/hashtable_class_helper.pxi", line 4562, in pandas._libs.hashtable.PyObjectHashTable.get_item
+KeyError: 'start_sec'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "preprocess_stanford_multilabel_original_fps.py", line 500, in main
+    multilabels = convert_labels_to_multilabel(label_file, num_seconds)
+  File "preprocess_stanford_multilabel_original_fps.py", line 312, in convert_labels_to_multilabel
+    start_sec = int(row['start_sec'])
+  File "/data-8tb/nvaci/miniconda3/envs/FACT/lib/python3.8/site-packages/pandas/core/series.py", line 853, in __getitem__
+    return self._get_value(key)
+  File "/data-8tb/nvaci/miniconda3/envs/FACT/lib/python3.8/site-packages/pandas/core/series.py", line 961, in _get_value
+    loc = self.index.get_loc(label)
+  File "/data-8tb/nvaci/miniconda3/envs/FACT/lib/python3.8/site-packages/pandas/core/indexes/base.py", line 3082, in get_loc
+    raise KeyError(key) from err
+KeyError: 'start_sec'
+Traceback (most recent call last):
+  File "/data-8tb/nvaci/miniconda3/envs/FACT/lib/python3.8/site-packages/pandas/core/indexes/base.py", line 3080, in get_loc
+    return self._engine.get_loc(casted_key)
+  File "pandas/_libs/index.pyx", line 70, in pandas._libs.index.IndexEngine.get_loc
+  File "pandas/_libs/index.pyx", line 101, in pandas._libs.index.IndexEngine.get_loc
+  File "pandas/_libs/hashtable_class_helper.pxi", line 4554, in pandas._libs.hashtable.PyObjectHashTable.get_item
+  File "pandas/_libs/hashtable_class_helper.pxi", line 4562, in pandas._libs.hashtable.PyObjectHashTable.get_item
+KeyError: 'start_sec'
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "preprocess_stanford_multilabel_original_fps.py", line 500, in main
+    multilabels = convert_labels_to_multilabel(label_file, num_seconds)
+  File "preprocess_stanford_multilabel_original_fps.py", line 312, in convert_labels_to_multilabel
+    start_sec = int(row['start_sec'])
+  File "/data-8tb/nvaci/miniconda3/envs/FACT/lib/python3.8/site-packages/pandas/core/series.py", line 853, in __getitem__
+    return self._get_value(key)
+  File "/data-8tb/nvaci/miniconda3/envs/FACT/lib/python3.8/site-packages/pandas/core/series.py", line 961, in _get_value
+    loc = self.index.get_loc(label)
+  File "/data-8tb/nvaci/miniconda3/envs/FACT/lib/python3.8/site-packages/pandas/core/indexes/base.py", line 3082, in get_loc
+    raise KeyError(key) from err
+KeyError: 'start_sec'
+[ID06] ERROR processing labels: 'start_sec'
+
+================================================================================
+Processing video 7/32: ID07
+================================================================================
+[ID07] Found label file: 25-021_ID07.csv
+[ID07] Step 1/3: Extracting features...
+      Opening video file...
+
+      ═══════════════════════════════════════════════════════
+      VIDEO PROPERTIES
+      ═══════════════════════════════════════════════════════
+      FPS detected: 25.00
+      Clip length (auto): 25 frames
+      Total frames: 95555
+      Duration: 3822.20 seconds
+      Expected seconds: 3823
+      Frames per second: ~25.0
+      ═══════════════════════════════════════════════════════
+
+      Using ORIGINAL FPS with per-second aggregation
+      Aggregation method: mean
+      ───────────────────────────────────────────────────────
+      READING ALL FRAMES FROM VIDEO
+      ───────────────────────────────────────────────────────
+      Progress: 500/95555 frames (0.5%)
+      Progress: 1000/95555 frames (1.0%)
+      Progress: 1500/95555 frames (1.6%)
+      Progress: 2000/95555 frames (2.1%)
+      Progress: 2500/95555 frames (2.6%)
+      Progress: 3000/95555 frames (3.1%)
+      Progress: 3500/95555 frames (3.7%)
+      Progress: 4000/95555 frames (4.2%)
+      Progress: 4500/95555 frames (4.7%)
+      Progress: 5000/95555 frames (5.2%)
+      Progress: 5500/95555 frames (5.8%)
+      Progress: 6000/95555 frames (6.3%)
+      Progress: 6500/95555 frames (6.8%)
+      Progress: 7000/95555 frames (7.3%)
+      Progress: 7500/95555 frames (7.8%)
+      Progress: 8000/95555 frames (8.4%)
+      Progress: 8500/95555 frames (8.9%)
+      Progress: 9000/95555 frames (9.4%)
+      Progress: 9500/95555 frames (9.9%)
+      Progress: 10000/95555 frames (10.5%)
+      Progress: 10500/95555 frames (11.0%)
+      Progress: 11000/95555 frames (11.5%)
+      Progress: 11500/95555 frames (12.0%)
+      Progress: 12000/95555 frames (12.6%)
+      Progress: 12500/95555 frames (13.1%)
+      Progress: 13000/95555 frames (13.6%)
+      Progress: 13500/95555 frames (14.1%)
+      Progress: 14000/95555 frames (14.7%)
+      Progress: 14500/95555 frames (15.2%)
+      Progress: 15000/95555 frames (15.7%)
+      Progress: 15500/95555 frames (16.2%)
+      Progress: 16000/95555 frames (16.7%)
+      Progress: 16500/95555 frames (17.3%)
+      Progress: 17000/95555 frames (17.8%)
+      Progress: 17500/95555 frames (18.3%)
+      Progress: 18000/95555 frames (18.8%)
+      Progress: 18500/95555 frames (19.4%)
+      Progress: 19000/95555 frames (19.9%)
+      Progress: 19500/95555 frames (20.4%)
+      Progress: 20000/95555 frames (20.9%)
+      Progress: 20500/95555 frames (21.5%)
+      Progress: 21000/95555 frames (22.0%)
+      Progress: 21500/95555 frames (22.5%)
+      Progress: 22000/95555 frames (23.0%)
+      Progress: 22500/95555 frames (23.5%)
+      Progress: 23000/95555 frames (24.1%)
+      Progress: 23500/95555 frames (24.6%)
+      Progress: 24000/95555 frames (25.1%)
+      Progress: 24500/95555 frames (25.6%)
+      Progress: 25000/95555 frames (26.2%)
+      Progress: 25500/95555 frames (26.7%)
+      Progress: 26000/95555 frames (27.2%)
+      Progress: 26500/95555 frames (27.7%)
+      Progress: 27000/95555 frames (28.3%)
+      Progress: 27500/95555 frames (28.8%)
+      Progress: 28000/95555 frames (29.3%)
+      Progress: 28500/95555 frames (29.8%)
+      Progress: 29000/95555 frames (30.3%)
+      Progress: 29500/95555 frames (30.9%)
+      Progress: 30000/95555 frames (31.4%)
+      Progress: 30500/95555 frames (31.9%)
+      Progress: 31000/95555 frames (32.4%)
+      Progress: 31500/95555 frames (33.0%)
+      Progress: 32000/95555 frames (33.5%)
+      Progress: 32500/95555 frames (34.0%)
+      Progress: 33000/95555 frames (34.5%)
+      Progress: 33500/95555 frames (35.1%)
+      Progress: 34000/95555 frames (35.6%)
+      Progress: 34500/95555 frames (36.1%)
+      Progress: 35000/95555 frames (36.6%)
+      Progress: 35500/95555 frames (37.2%)
+      Progress: 36000/95555 frames (37.7%)
+      Progress: 36500/95555 frames (38.2%)
+      Progress: 37000/95555 frames (38.7%)
+      Progress: 37500/95555 frames (39.2%)
+      Progress: 38000/95555 frames (39.8%)
+      Progress: 38500/95555 frames (40.3%)
+      Progress: 39000/95555 frames (40.8%)
+      Progress: 39500/95555 frames (41.3%)
+      Progress: 40000/95555 frames (41.9%)
+      Progress: 40500/95555 frames (42.4%)
+      Progress: 41000/95555 frames (42.9%)
+      Progress: 41500/95555 frames (43.4%)
+      Progress: 42000/95555 frames (44.0%)
+      Progress: 42500/95555 frames (44.5%)
+      Progress: 43000/95555 frames (45.0%)
+      Progress: 43500/95555 frames (45.5%)
+      Progress: 44000/95555 frames (46.0%)
+      Progress: 44500/95555 frames (46.6%)
+      Progress: 45000/95555 frames (47.1%)
+      Progress: 45500/95555 frames (47.6%)
+      Progress: 46000/95555 frames (48.1%)
+      Progress: 46500/95555 frames (48.7%)
+      Progress: 47000/95555 frames (49.2%)
+      Progress: 47500/95555 frames (49.7%)
+      Progress: 48000/95555 frames (50.2%)
+      Progress: 48500/95555 frames (50.8%)
+      Progress: 49000/95555 frames (51.3%)
+      Progress: 49500/95555 frames (51.8%)
+      Progress: 50000/95555 frames (52.3%)
+      Progress: 50500/95555 frames (52.8%)
+      Progress: 51000/95555 frames (53.4%)
+      Progress: 51500/95555 frames (53.9%)
+      Progress: 52000/95555 frames (54.4%)
+      Progress: 52500/95555 frames (54.9%)
+      Progress: 53000/95555 frames (55.5%)
+      Progress: 53500/95555 frames (56.0%)
+      Progress: 54000/95555 frames (56.5%)
+      Progress: 54500/95555 frames (57.0%)
+      Progress: 55000/95555 frames (57.6%)
+      Progress: 55500/95555 frames (58.1%)
+      Progress: 56000/95555 frames (58.6%)
+      Progress: 56500/95555 frames (59.1%)
+      Progress: 57000/95555 frames (59.7%)
+      Progress: 57500/95555 frames (60.2%)
+      Progress: 58000/95555 frames (60.7%)
+      Progress: 58500/95555 frames (61.2%)
+      Progress: 59000/95555 frames (61.7%)
+      Progress: 59500/95555 frames (62.3%)
+      Progress: 60000/95555 frames (62.8%)
+      Progress: 60500/95555 frames (63.3%)
+      Progress: 61000/95555 frames (63.8%)
+      Progress: 61500/95555 frames (64.4%)
+      Progress: 62000/95555 frames (64.9%)
+      Progress: 62500/95555 frames (65.4%)
+      Progress: 63000/95555 frames (65.9%)
+      Progress: 63500/95555 frames (66.5%)
+      Progress: 64000/95555 frames (67.0%)
+      Progress: 64500/95555 frames (67.5%)
+      Progress: 65000/95555 frames (68.0%)
+      Progress: 65500/95555 frames (68.5%)
+      Progress: 66000/95555 frames (69.1%)
+      Progress: 66500/95555 frames (69.6%)
+      Progress: 67000/95555 frames (70.1%)
+      Progress: 67500/95555 frames (70.6%)
+      Progress: 68000/95555 frames (71.2%)
+      Progress: 68500/95555 frames (71.7%)
+      Progress: 69000/95555 frames (72.2%)
+      Progress: 69500/95555 frames (72.7%)
+      Progress: 70000/95555 frames (73.3%)
+      Progress: 70500/95555 frames (73.8%)
+      Progress: 71000/95555 frames (74.3%)
+      Progress: 71500/95555 frames (74.8%)
+      Progress: 72000/95555 frames (75.3%)
+      Progress: 72500/95555 frames (75.9%)
+      Progress: 73000/95555 frames (76.4%)
+      Progress: 73500/95555 frames (76.9%)
+      Progress: 74000/95555 frames (77.4%)
+      Progress: 74500/95555 frames (78.0%)
+      Progress: 75000/95555 frames (78.5%)
+      Progress: 75500/95555 frames (79.0%)
+      Progress: 76000/95555 frames (79.5%)
+      Progress: 76500/95555 frames (80.1%)
+      Progress: 77000/95555 frames (80.6%)
+      Progress: 77500/95555 frames (81.1%)
+      Progress: 78000/95555 frames (81.6%)
+      Progress: 78500/95555 frames (82.2%)
+      Progress: 79000/95555 frames (82.7%)
+      Progress: 79500/95555 frames (83.2%)
+      Progress: 80000/95555 frames (83.7%)
+      Progress: 80500/95555 frames (84.2%)
+      Progress: 81000/95555 frames (84.8%)
+      Progress: 81500/95555 frames (85.3%)
+      Progress: 82000/95555 frames (85.8%)
+      Progress: 82500/95555 frames (86.3%)
+      Progress: 83000/95555 frames (86.9%)
+      Progress: 83500/95555 frames (87.4%)
+      Progress: 84000/95555 frames (87.9%)
+      Progress: 84500/95555 frames (88.4%)
+      Progress: 85000/95555 frames (89.0%)
+      Progress: 85500/95555 frames (89.5%)
+      Progress: 86000/95555 frames (90.0%)
+      Progress: 86500/95555 frames (90.5%)
+      Progress: 87000/95555 frames (91.0%)
+      Progress: 87500/95555 frames (91.6%)
+      Progress: 88000/95555 frames (92.1%)
+      Progress: 88500/95555 frames (92.6%)
+      Progress: 89000/95555 frames (93.1%)
+      Progress: 89500/95555 frames (93.7%)
+      Progress: 90000/95555 frames (94.2%)
+      Progress: 90500/95555 frames (94.7%)
+      Progress: 91000/95555 frames (95.2%)
+      Progress: 91500/95555 frames (95.8%)
+      Progress: 92000/95555 frames (96.3%)
+      Progress: 92500/95555 frames (96.8%)
+      Progress: 93000/95555 frames (97.3%)
+      Progress: 93500/95555 frames (97.8%)
+      Progress: 94000/95555 frames (98.4%)
+      Progress: 94500/95555 frames (98.9%)
+      Progress: 95000/95555 frames (99.4%)
+      Progress: 95500/95555 frames (99.9%)
+      WARNING: 200 consecutive frame read failures
+      Breaking loop at frame 95538/95555
+      Frames successfully read: 95538
+      Total missed frames: 200
+      ───────────────────────────────────────────────────────
+      FRAME READING COMPLETE
+      ───────────────────────────────────────────────────────
+      Expected frames: 95555
+      Frames read: 95538
+      Frames missing: 200
+      WARNING: 200 frames could not be read!
+      WARNING: Read fewer frames than expected (95538/95555)
+      This may be due to video corruption or codec issues
+      ───────────────────────────────────────────────────────
+
+      ───────────────────────────────────────────────────────
+      EXTRACTING FEATURES PER SECOND
+      ───────────────────────────────────────────────────────
+      Total seconds to process: 3823
+        Second 100/3823
+        Second 200/3823
+        Second 300/3823
+        Second 400/3823
+        Second 500/3823
+        Second 600/3823
+        Second 700/3823
+        Second 800/3823
+        Second 900/3823
+        Second 1000/3823
+        Second 1100/3823
+        Second 1200/3823
+        Second 1300/3823
+        Second 1400/3823
+        Second 1500/3823
+        Second 1600/3823
+        Second 1700/3823
+        Second 1800/3823
+        Second 1900/3823
+        Second 2000/3823
+        Second 2100/3823
+        Second 2200/3823
+        Second 2300/3823
+        Second 2400/3823
+        Second 2500/3823
+        Second 2600/3823
+        Second 2700/3823
+        Second 2800/3823
+        Second 2900/3823
+        Second 3000/3823
+        Second 3100/3823
+        Second 3200/3823
+        Second 3300/3823
+        Second 3400/3823
+        Second 3500/3823
+        Second 3600/3823
+        Second 3700/3823
+        Second 3800/3823
+      ───────────────────────────────────────────────────────
+      FEATURE EXTRACTION COMPLETE
+      ───────────────────────────────────────────────────────
+      Final features shape: (3823, 512)
+
+[ID07]   Features extracted: (3823, 512)
+[ID07] Step 2/3: Converting to multi-label format...
+[ID07] ERROR processing labels: 'start_sec'
+
+================================================================================
+Processing video 8/32: ID08
+================================================================================
+[ID08] Found label file: 25-021_ID08.csv
+[ID08] Step 1/3: Extracting features...
+      Opening video file...
+
+      ═══════════════════════════════════════════════════════
+      VIDEO PROPERTIES
+      ═══════════════════════════════════════════════════════
+      FPS detected: 25.00
+      Clip length (auto): 25 frames
+      Total frames: 94691
+      Duration: 3787.64 seconds
+      Expected seconds: 3788
+      Frames per second: ~25.0
+      ═══════════════════════════════════════════════════════
+
+      Using ORIGINAL FPS with per-second aggregation
+      Aggregation method: mean
+      ───────────────────────────────────────────────────────
+      READING ALL FRAMES FROM VIDEO
+      ───────────────────────────────────────────────────────
+      Progress: 500/94691 frames (0.5%)
+      Progress: 1000/94691 frames (1.1%)
+      Progress: 1500/94691 frames (1.6%)
+      Progress: 2000/94691 frames (2.1%)
+      Progress: 2500/94691 frames (2.6%)
+      Progress: 3000/94691 frames (3.2%)
+      Progress: 3500/94691 frames (3.7%)
+      Progress: 4000/94691 frames (4.2%)
+      Progress: 4500/94691 frames (4.8%)
+      Progress: 5000/94691 frames (5.3%)
+      Progress: 5500/94691 frames (5.8%)
+      Progress: 6000/94691 frames (6.3%)
+      Progress: 6500/94691 frames (6.9%)
+      Progress: 7000/94691 frames (7.4%)
+      Progress: 7500/94691 frames (7.9%)
+      Progress: 8000/94691 frames (8.4%)
+      Progress: 8500/94691 frames (9.0%)
+      Progress: 9000/94691 frames (9.5%)
+      Progress: 9500/94691 frames (10.0%)
+      Progress: 10000/94691 frames (10.6%)
+      Progress: 10500/94691 frames (11.1%)
+      Progress: 11000/94691 frames (11.6%)
+      Progress: 11500/94691 frames (12.1%)
+      Progress: 12000/94691 frames (12.7%)
+      Progress: 12500/94691 frames (13.2%)
+      Progress: 13000/94691 frames (13.7%)
+      Progress: 13500/94691 frames (14.3%)
+      Progress: 14000/94691 frames (14.8%)
+      Progress: 14500/94691 frames (15.3%)
+      Progress: 15000/94691 frames (15.8%)
+      Progress: 15500/94691 frames (16.4%)
+      Progress: 16000/94691 frames (16.9%)
+      Progress: 16500/94691 frames (17.4%)
+      Progress: 17000/94691 frames (18.0%)
+      Progress: 17500/94691 frames (18.5%)
+      Progress: 18000/94691 frames (19.0%)
+      Progress: 18500/94691 frames (19.5%)
+      Progress: 19000/94691 frames (20.1%)
+      Progress: 19500/94691 frames (20.6%)
+      Progress: 20000/94691 frames (21.1%)
+      Progress: 20500/94691 frames (21.6%)
+      Progress: 21000/94691 frames (22.2%)
+      Progress: 21500/94691 frames (22.7%)
+      Progress: 22000/94691 frames (23.2%)
+      Progress: 22500/94691 frames (23.8%)
+      Progress: 23000/94691 frames (24.3%)
+      Progress: 23500/94691 frames (24.8%)
+      Progress: 24000/94691 frames (25.3%)
+      Progress: 24500/94691 frames (25.9%)
+      Progress: 25000/94691 frames (26.4%)
+      Progress: 25500/94691 frames (26.9%)
+      Progress: 26000/94691 frames (27.5%)
+      Progress: 26500/94691 frames (28.0%)
+      Progress: 27000/94691 frames (28.5%)
+      Progress: 27500/94691 frames (29.0%)
+      Progress: 28000/94691 frames (29.6%)
+      Progress: 28500/94691 frames (30.1%)
+      Progress: 29000/94691 frames (30.6%)
+      Progress: 29500/94691 frames (31.2%)
+      Progress: 30000/94691 frames (31.7%)
+      Progress: 30500/94691 frames (32.2%)
+      Progress: 31000/94691 frames (32.7%)
+      Progress: 31500/94691 frames (33.3%)
+      Progress: 32000/94691 frames (33.8%)
+      Progress: 32500/94691 frames (34.3%)
+      Progress: 33000/94691 frames (34.9%)
+      Progress: 33500/94691 frames (35.4%)
+      Progress: 34000/94691 frames (35.9%)
+      Progress: 34500/94691 frames (36.4%)
+      Progress: 35000/94691 frames (37.0%)
+      Progress: 35500/94691 frames (37.5%)
+      Progress: 36000/94691 frames (38.0%)
+      Progress: 36500/94691 frames (38.5%)
+      Progress: 37000/94691 frames (39.1%)
+      Progress: 37500/94691 frames (39.6%)
+      Progress: 38000/94691 frames (40.1%)
+      Progress: 38500/94691 frames (40.7%)
+      Progress: 39000/94691 frames (41.2%)
+      Progress: 39500/94691 frames (41.7%)
+      Progress: 40000/94691 frames (42.2%)
+      Progress: 40500/94691 frames (42.8%)
+      Progress: 41000/94691 frames (43.3%)
+      Progress: 41500/94691 frames (43.8%)
+      Progress: 42000/94691 frames (44.4%)
+      Progress: 42500/94691 frames (44.9%)
+      Progress: 43000/94691 frames (45.4%)
+      Progress: 43500/94691 frames (45.9%)
+      Progress: 44000/94691 frames (46.5%)
+      Progress: 44500/94691 frames (47.0%)
+      Progress: 45000/94691 frames (47.5%)
+      Progress: 45500/94691 frames (48.1%)
+      Progress: 46000/94691 frames (48.6%)
+      Progress: 46500/94691 frames (49.1%)
+      Progress: 47000/94691 frames (49.6%)
+      Progress: 47500/94691 frames (50.2%)
+      Progress: 48000/94691 frames (50.7%)
+      Progress: 48500/94691 frames (51.2%)
+      Progress: 49000/94691 frames (51.7%)
+      Progress: 49500/94691 frames (52.3%)
+      Progress: 50000/94691 frames (52.8%)
+      Progress: 50500/94691 frames (53.3%)
+      Progress: 51000/94691 frames (53.9%)
+      Progress: 51500/94691 frames (54.4%)
+      Progress: 52000/94691 frames (54.9%)
+      Progress: 52500/94691 frames (55.4%)
+      Progress: 53000/94691 frames (56.0%)
+      Progress: 53500/94691 frames (56.5%)
+      Progress: 54000/94691 frames (57.0%)
+      Progress: 54500/94691 frames (57.6%)
+      Progress: 55000/94691 frames (58.1%)
+      Progress: 55500/94691 frames (58.6%)
+      Progress: 56000/94691 frames (59.1%)
+      Progress: 56500/94691 frames (59.7%)
+      Progress: 57000/94691 frames (60.2%)
+      Progress: 57500/94691 frames (60.7%)
+      Progress: 58000/94691 frames (61.3%)
+      Progress: 58500/94691 frames (61.8%)
+      Progress: 59000/94691 frames (62.3%)
+      Progress: 59500/94691 frames (62.8%)
+      Progress: 60000/94691 frames (63.4%)
+      Progress: 60500/94691 frames (63.9%)
+      Progress: 61000/94691 frames (64.4%)
+      Progress: 61500/94691 frames (64.9%)
+      Progress: 62000/94691 frames (65.5%)
+      Progress: 62500/94691 frames (66.0%)
+      Progress: 63000/94691 frames (66.5%)
+      Progress: 63500/94691 frames (67.1%)
+      Progress: 64000/94691 frames (67.6%)
+      Progress: 64500/94691 frames (68.1%)
+      Progress: 65000/94691 frames (68.6%)
+      Progress: 65500/94691 frames (69.2%)
+      Progress: 66000/94691 frames (69.7%)
+      Progress: 66500/94691 frames (70.2%)
+      Progress: 67000/94691 frames (70.8%)
+      Progress: 67500/94691 frames (71.3%)
+      Progress: 68000/94691 frames (71.8%)
+      Progress: 68500/94691 frames (72.3%)
+      Progress: 69000/94691 frames (72.9%)
+      Progress: 69500/94691 frames (73.4%)
+      Progress: 70000/94691 frames (73.9%)
+      Progress: 70500/94691 frames (74.5%)
+      Progress: 71000/94691 frames (75.0%)
+      Progress: 71500/94691 frames (75.5%)
+      Progress: 72000/94691 frames (76.0%)
+      Progress: 72500/94691 frames (76.6%)
+      Progress: 73000/94691 frames (77.1%)
+      Progress: 73500/94691 frames (77.6%)
+      Progress: 74000/94691 frames (78.1%)
+      Progress: 74500/94691 frames (78.7%)
+      Progress: 75000/94691 frames (79.2%)
+      Progress: 75500/94691 frames (79.7%)

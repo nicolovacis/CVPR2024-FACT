@@ -13,6 +13,11 @@ KEY FEATURES:
 FAST VERSION:
 - Uses direct NumPy operations instead of PIL/Tensor transforms
 - ~10x faster frame reading compared to original
+
+FIXED VERSION:
+- Corrected CSV reading logic to match actual CSV format
+- CSV has columns: licking, shaking (binary 1.0/0.0 for each second)
+- NOT: start_sec, end_sec, behavior
 """
 
 import os
@@ -198,84 +203,101 @@ def extract_video_features_per_second(video_path, model, model_type, device, agg
         print(f"      WARNING: Read fewer frames than expected ({frame_count}/{total_frames})", flush=True)
         print(f"      This may be due to video corruption or codec issues", flush=True)
     print(f"      ---------------------------------------------------", flush=True)
-    print(f"", flush=True)
     sys.stdout.flush()
     
-    # Extract features per second
-    all_features = []
+    # Determine feature dimension
+    if model_type == 'i3d':
+        feature_dim = 1024
+    else:
+        feature_dim = 512
     
+    # Extract features for each second
     print(f"      ---------------------------------------------------", flush=True)
     print(f"      EXTRACTING FEATURES PER SECOND", flush=True)
     print(f"      ---------------------------------------------------", flush=True)
-    print(f"      Total seconds to process: {num_seconds}", flush=True)
+    print(f"      Processing {num_seconds} seconds...", flush=True)
     sys.stdout.flush()
     
+    features_per_second = []
+    
     with torch.no_grad():
-        for sec_idx in range(num_seconds):
-            frames = frames_by_second[sec_idx]
-            
-            if len(frames) == 0:
-                dummy_clip = torch.zeros(1, 3, clip_len, 224, 224).to(device)
-                if model_type == 'i3d':
-                    dummy_feat = model.extract_features(dummy_clip)
-                else:
-                    dummy_feat = model(dummy_clip)
-                feat_dim = dummy_feat.squeeze().shape[0]
-                second_feature = np.zeros(feat_dim, dtype=np.float32)
-                all_features.append(second_feature)
+        for sec_idx, frames_in_second in enumerate(frames_by_second):
+            if len(frames_in_second) == 0:
+                print(f"        WARNING: Second {sec_idx} has no frames! Using zeros.", flush=True)
+                features_per_second.append(np.zeros(feature_dim, dtype=np.float32))
                 continue
             
-            clip_features = []
+            if sec_idx % 100 == 0:
+                print(f"        Second {sec_idx}/{num_seconds}", flush=True)
+                sys.stdout.flush()
             
-            if len(frames) < clip_len:
-                while len(frames) < clip_len:
-                    frames.append(frames[-1] if len(frames) > 0 else np.zeros((224, 224, 3), dtype=np.float32))
+            # Stack frames for this second
+            frames_np = np.stack(frames_in_second, axis=0)
+            
+            # Determine how many clips we can make
+            n_frames = len(frames_in_second)
+            
+            if n_frames < clip_len:
+                # Pad with the last frame
+                padding_needed = clip_len - n_frames
+                last_frame = frames_in_second[-1]
+                padded_frames = frames_in_second + [last_frame] * padding_needed
+                frames_np = np.stack(padded_frames, axis=0)
+                clips = [frames_np]
+            else:
+                # Create overlapping clips
+                clips = []
+                step_size = max(1, (n_frames - clip_len) // 3) if n_frames > clip_len else 1
                 
-                clip_array = np.stack(frames[:clip_len], axis=0)
-                clip_tensor = torch.from_numpy(clip_array).permute(3, 0, 1, 2).unsqueeze(0)
-                clip_tensor = clip_tensor.float().to(device)
+                for start_idx in range(0, n_frames - clip_len + 1, step_size):
+                    clip_frames = frames_in_second[start_idx:start_idx + clip_len]
+                    if len(clip_frames) == clip_len:
+                        clips.append(np.stack(clip_frames, axis=0))
                 
+                if len(clips) == 0:
+                    clips = [frames_np[:clip_len]]
+            
+            # Extract features from each clip
+            clip_features = []
+            for clip in clips:
+                # Convert to torch tensor: (C, T, H, W)
+                clip_tensor = torch.from_numpy(clip).permute(3, 0, 1, 2).unsqueeze(0).to(device)
+                
+                # Extract features
                 if model_type == 'i3d':
-                    feat = model.extract_features(clip_tensor)
+                    feat = model(clip_tensor)
+                    feat = feat.squeeze(-1).squeeze(-1).squeeze(-1)
                 else:
                     feat = model(clip_tensor)
+                    feat = feat.squeeze(-1).squeeze(-1).squeeze(-1)
                 
-                feat = feat.squeeze().cpu().numpy()
-                clip_features.append(feat)
-            else:
-                stride = clip_len // 2
-                num_clips = (len(frames) - clip_len) // stride + 1
-                
-                for clip_idx in range(num_clips):
-                    start_idx = clip_idx * stride
-                    end_idx = start_idx + clip_len
-                    
-                    if end_idx <= len(frames):
-                        clip_frames = frames[start_idx:end_idx]
-                        clip_array = np.stack(clip_frames, axis=0)
-                        clip_tensor = torch.from_numpy(clip_array).permute(3, 0, 1, 2).unsqueeze(0)
-                        clip_tensor = clip_tensor.float().to(device)
-                        
-                        if model_type == 'i3d':
-                            feat = model.extract_features(clip_tensor)
-                        else:
-                            feat = model(clip_tensor)
-                        
-                        feat = feat.squeeze().cpu().numpy()
-                        clip_features.append(feat)
+                clip_features.append(feat.cpu().numpy())
             
+            # Aggregate clip features for this second
+            clip_features = np.array(clip_features)
             if aggregation == 'mean':
                 second_feature = np.mean(clip_features, axis=0)
-            else:
+            elif aggregation == 'max':
                 second_feature = np.max(clip_features, axis=0)
+            else:
+                second_feature = np.mean(clip_features, axis=0)
             
-            all_features.append(second_feature)
+            # Ensure feature is the right shape and type
+            second_feature = second_feature.astype(np.float32).flatten()
+            if len(second_feature) != feature_dim:
+                print(f"        WARNING: Second {sec_idx} feature dimension mismatch! Expected {feature_dim}, got {len(second_feature)}", flush=True)
+                # Pad or truncate to match expected dimension
+                if len(second_feature) < feature_dim:
+                    padded = np.zeros(feature_dim, dtype=np.float32)
+                    padded[:len(second_feature)] = second_feature
+                    second_feature = padded
+                else:
+                    second_feature = second_feature[:feature_dim]
             
-            if (sec_idx + 1) % 100 == 0:
-                print(f"        Second {sec_idx + 1}/{num_seconds}", flush=True)
-                sys.stdout.flush()
+            features_per_second.append(second_feature)
     
-    features = np.array(all_features, dtype=np.float32)
+    # Stack features - all should now have consistent shape
+    features = np.stack(features_per_second, axis=0)
     
     print(f"      ---------------------------------------------------", flush=True)
     print(f"      FEATURE EXTRACTION COMPLETE", flush=True)
@@ -292,32 +314,54 @@ def convert_labels_to_multilabel(label_file, num_seconds):
     Convert CSV labels to multi-label format with licking and shaking.
     Each second gets TWO binary labels: [licking, shaking]
     
+    FIXED VERSION: Correctly reads CSV format with 'licking' and 'shaking' columns
+    (NOT start_sec, end_sec, behavior)
+    
+    CSV format: Each row represents 1 second
+    Columns: licking (1.0/0.0), shaking (1.0/0.0)
+    
     Returns:
         numpy array of shape (num_seconds, 2) with values 0 or 1
     """
     df = pd.read_csv(label_file)
+    
+    print(f"      CSV columns: {df.columns.tolist()}", flush=True)
+    print(f"      CSV shape: {df.shape}", flush=True)
+    print(f"      Video seconds: {num_seconds}", flush=True)
     
     # Initialize multi-label array: (num_seconds, 2)
     # Column 0: licking (0/1)
     # Column 1: shaking (0/1)
     multilabels = np.zeros((num_seconds, 2), dtype=np.int32)
     
-    for _, row in df.iterrows():
-        start_sec = int(row['start_sec'])
-        end_sec = int(row['end_sec'])
-        behavior = str(row['behavior']).strip().lower()
-        
-        # Determine which label to set
-        if 'lick' in behavior:
-            label_idx = 0
-        elif 'shake' in behavior:
-            label_idx = 1
-        else:
+    # Process each row (each row = 1 second)
+    for idx, row in df.iterrows():
+        # Only process rows that correspond to actual video seconds
+        if idx >= num_seconds:
             continue
         
-        # Mark all seconds in this range
-        for sec in range(start_sec, min(end_sec, num_seconds)):
-            multilabels[sec, label_idx] = 1
+        # Read licking and shaking values (1.0 or 0.0)
+        licking_val = row['licking']
+        shaking_val = row['shaking']
+        
+        # Set multi-label values
+        multilabels[idx, 0] = 1 if licking_val == 1.0 else 0  # licking
+        multilabels[idx, 1] = 1 if shaking_val == 1.0 else 0  # shaking
+    
+    # Calculate statistics
+    n_licking = np.sum(multilabels[:, 0])
+    n_shaking = np.sum(multilabels[:, 1])
+    n_both = np.sum((multilabels[:, 0] == 1) & (multilabels[:, 1] == 1))
+    n_background = np.sum((multilabels[:, 0] == 0) & (multilabels[:, 1] == 0))
+    
+    print(f"      Total rows in CSV: {len(df)}", flush=True)
+    print(f"      Valid rows (within video duration): {min(len(df), num_seconds)}", flush=True)
+    print(f"      Label statistics:", flush=True)
+    print(f"        Licking only: {n_licking - n_both}", flush=True)
+    print(f"        Shaking only: {n_shaking - n_both}", flush=True)
+    print(f"        Both (licking + shaking): {n_both}", flush=True)
+    print(f"        Background (neither): {n_background}", flush=True)
+    sys.stdout.flush()
     
     return multilabels
 
@@ -342,29 +386,32 @@ def create_train_test_splits(video_ids, output_dir, train_ratio=0.8, n_splits=5,
     print(f"\nCreating {n_splits} train/test splits...")
     print(f"  Train ratio: {train_ratio} ({n_train}/{n_videos} videos)")
     
-    for split_idx in range(1, n_splits + 1):
+    for split_idx in range(n_splits):
+        # Shuffle videos
         shuffled_ids = video_ids.copy()
         random.shuffle(shuffled_ids)
         
+        # Split into train/test
         train_ids = shuffled_ids[:n_train]
         test_ids = shuffled_ids[n_train:]
         
-        train_file = splits_dir / f'train.split{split_idx}.bundle'
-        test_file = splits_dir / f'test.split{split_idx}.bundle'
-        
+        # Save train split
+        train_file = splits_dir / f'train.split{split_idx + 1}.bundle'
         with open(train_file, 'w') as f:
-            for vid in train_ids:
-                f.write(f"{vid}\n")
+            for video_id in train_ids:
+                f.write(f"{video_id}\n")
         
+        # Save test split
+        test_file = splits_dir / f'test.split{split_idx + 1}.bundle'
         with open(test_file, 'w') as f:
-            for vid in test_ids:
-                f.write(f"{vid}\n")
+            for video_id in test_ids:
+                f.write(f"{video_id}\n")
         
-        print(f"  Split {split_idx}: {len(train_ids)} train, {len(test_ids)} test")
+        print(f"  Split {split_idx + 1}: {len(train_ids)} train, {len(test_ids)} test")
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Preprocess Stanford dataset for FACT (Multi-label: licking & shaking) - FAST VERSION')
+    parser = argparse.ArgumentParser(description='Preprocess Stanford dataset for FACT (Multi-label, Fast)')
     parser.add_argument('--input_videos', type=str, required=True,
                         help='Path to directory containing input videos (.mp4)')
     parser.add_argument('--input_labels', type=str, required=True,
@@ -391,7 +438,7 @@ def main():
     set_cpu_threads(args.cpu_threads)
     
     print("=" * 80, flush=True)
-    print("STANFORD MULTI-LABEL DATASET PREPROCESSING (FAST VERSION)", flush=True)
+    print("STANFORD MULTI-LABEL DATASET PREPROCESSING (FAST VERSION - FIXED)", flush=True)
     print("Multi-label: Licking & Shaking (Independent Binary Outputs)", flush=True)
     print("=" * 80, flush=True)
     print(f"Started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}", flush=True)
@@ -402,6 +449,7 @@ def main():
     print(f"  Label format: Multi-label (licking AND shaking)", flush=True)
     print(f"  NO BALANCING - Dataset kept as-is", flush=True)
     print(f"  FAST MODE: Using NumPy instead of PIL/Tensor transforms", flush=True)
+    print(f"  FIXED: Corrected CSV reading (licking/shaking columns)", flush=True)
     sys.stdout.flush()
     
     # Setup paths
@@ -561,6 +609,7 @@ def main():
     print(f"  - Labels saved as .npy with shape (n_seconds, 2)")
     print(f"  - Ready for two-head sigmoid output model")
     print(f"  - FAST VERSION: ~10x faster frame reading")
+    print(f"  - FIXED: Corrected CSV reading logic")
 
 
 if __name__ == '__main__':

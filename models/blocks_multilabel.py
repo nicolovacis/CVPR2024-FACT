@@ -6,7 +6,7 @@ from ..utils import utils
 from ..configs.utils import update_from
 from . import loss
 from .loss_multilabel import MultiLabelMatchCriterion, logit2prob_multilabel
-from .basic import torch_class_label_to_segment_label, time_mask
+from .basic import time_mask
 
 class FACT(nn.Module):
 
@@ -19,9 +19,9 @@ class FACT(nn.Module):
         self.frame_pe = basic.PositionalEncoding(base_cfg.hid_dim, max_len=10000, empty=(not cfg.FACT.fpos) )
         self.channel_masking_dropout = nn.Dropout2d(p=cfg.FACT.cmr)
 
-        if not cfg.FACT.trans : # when video transcript is not available at training and inference
+        if not cfg.FACT.trans:
             self.action_query = nn.Parameter(torch.randn([cfg.FACT.ntoken, 1, base_cfg.a_dim]))
-        else: # when video transcript is available
+        else:
             self.action_pe = basic.PositionalEncoding(base_cfg.a_dim, max_len=1000)
             self.action_embed = nn.Embedding(n_classes, base_cfg.a_dim)
 
@@ -42,7 +42,6 @@ class FACT(nn.Module):
             block_list.append(block)
 
         self.block_list = nn.ModuleList(block_list)
-
         self.mcriterion = None
 
     def _forward_one_video(self, seq, transcript=None):
@@ -61,18 +60,15 @@ class FACT(nn.Module):
 
         # prepare action feature
         if not self.cfg.FACT.trans:
-            action_pe = self.action_query # M, B(=1), H
+            action_pe = self.action_query
             action_feature = torch.zeros_like(action_pe)
         else:
             action_pe = self.action_pe(transcript)
             action_feature = self.action_embed(transcript).unsqueeze(1)
-
             action_feature = action_feature + action_pe
             action_pe = torch.zeros_like(action_pe)
 
         # forward
-        # frame_feature: T, B(=1), H
-        # action_feature: M, B(=1), H
         block_output = []
         for i, block in enumerate(self.block_list):
             frame_feature, action_feature = block(frame_feature, action_feature, frame_pe, action_pe)
@@ -87,7 +83,6 @@ class FACT(nn.Module):
         cprob = logit2prob_multilabel(block.action_clogit, dim=-1)
         match = mcriterion.match(cprob, block.a2f_attn)
 
-        ######## per block loss
         loss_list = []
         for block in self.block_list:
             loss = block.compute_loss(mcriterion, match)
@@ -98,27 +93,22 @@ class FACT(nn.Module):
         return final_loss
 
     def forward(self, seq_list, label_list, compute_loss=False):
-
         save_list = []
         final_loss = []
 
         for i, (seq, label) in enumerate(zip(seq_list, label_list)):
             seq = seq.unsqueeze(1)
-            # label is now composite for transcript compatibility
-            trans = torch_class_label_to_segment_label(label)[0]
-            self._forward_one_video(seq, trans)
+            # For multi-label, we don't use transcript
+            self._forward_one_video(seq, transcript=None)
 
-            pred = self.block_list[-1].eval(trans)
+            pred = self.block_list[-1].eval_multilabel()
             save_data = {'pred': utils.to_numpy(pred)}
             save_list.append(save_data)
 
             if compute_loss:
-                # For loss, we need multi-label format
-                # Label is composite, we need to convert back
                 loss = self._loss_one_video(label)
                 final_loss.append(loss)
                 save_data['loss'] = { 'loss': loss.item() }
-
 
         if compute_loss:
             final_loss = sum(final_loss) / len(final_loss)
@@ -149,35 +139,34 @@ class Block(nn.Module):
 
     def process_feature(self, feature, nclass):
         # use the last several dimension as logit of action classes
-        clogit = feature[:, :, -nclass:] # class logit
-        feature = feature[:, :, :-nclass] # feature without clogit
-        cprob = logit2prob_multilabel(clogit, dim=-1)  # apply sigmoid for multilabel
+        clogit = feature[:, :, -nclass:]
+        feature = feature[:, :, :-nclass]
+        cprob = logit2prob_multilabel(clogit, dim=-1)
         feature = torch.cat([feature, cprob], dim=-1)
-
         return feature, clogit
 
     def create_fbranch(self, cfg, in_dim=None, f_inmap=False):
         if in_dim is None:
             in_dim = cfg.f_dim
 
-        if cfg.f == 'm': # use MSTCN
+        if cfg.f == 'm':
             frame_branch = basic.MSTCN(in_dim, cfg.f_dim, cfg.hid_dim, cfg.f_layers, 
                                 dropout=cfg.dropout, ln=cfg.f_ln, ngroup=cfg.f_ngp, in_map=f_inmap)
-        elif cfg.f == 'm2': # use MSTCN++
+        elif cfg.f == 'm2':
             frame_branch = basic.MSTCN2(in_dim, cfg.f_dim, cfg.hid_dim, cfg.f_layers, 
                                 dropout=cfg.dropout, ln=cfg.f_ln, ngroup=cfg.f_ngp, in_map=f_inmap)
 
         return frame_branch
 
     def create_abranch(self, cfg):
-        if cfg.a == 'sa': # self-attention layers, for update blocks
+        if cfg.a == 'sa':
             l = basic.SALayer(cfg.a_dim, cfg.a_nhead, dim_feedforward=cfg.a_ffdim, dropout=cfg.dropout, attn_dropout=cfg.dropout)
             action_branch = basic.SADecoder(cfg.a_dim, cfg.a_dim, cfg.hid_dim, l, cfg.a_layers, in_map=False)
-        elif cfg.a == 'sca': # self+cross-attention layers, for input blocks when video transcripts are not available
+        elif cfg.a == 'sca':
             layer = basic.SCALayer(cfg.a_dim, cfg.hid_dim, cfg.a_nhead, cfg.a_ffdim, dropout=cfg.dropout, attn_dropout=cfg.dropout)
             norm = torch.nn.LayerNorm(cfg.a_dim)
             action_branch = basic.SCADecoder(cfg.a_dim, cfg.a_dim, cfg.hid_dim, layer, cfg.a_layers, norm=norm, in_map=False)
-        elif cfg.a in ['gru', 'gru_om']: # GRU, for input blocks when video transcripts are available
+        elif cfg.a in ['gru', 'gru_om']:
             assert self.cfg.FACT.trans
             out_map = (cfg.a == 'gru_om')
             action_branch = basic.ActionUpdate_GRU(cfg.a_dim, cfg.a_dim, cfg.hid_dim, cfg.a_layers, dropout=cfg.dropout, out_map=out_map)
@@ -187,53 +176,48 @@ class Block(nn.Module):
         return action_branch
 
     def create_cross_attention(self, cfg, outdim, kq_pos=True):
-        # one layer of cross-attention for cross-branch communication
         layer = basic.X2Y_map(cfg.hid_dim, cfg.hid_dim, outdim, 
             head_dim=cfg.hid_dim,
             dropout=cfg.dropout, kq_pos=kq_pos)
-        
         return layer
 
-    @staticmethod
-    def _eval(action_clogit, a2f_attn, frame_clogit, weight):
-        fbranch_prob = torch.sigmoid(frame_clogit.squeeze(1))
+    def eval_multilabel(self, weight=None):
+        """
+        Evaluation for multi-label predictions
+        Returns: (T, num_labels) with values 0 or 1
+        """
+        if weight is None:
+            weight = self.cfg.FACT.mwt
 
-        action_clogit = action_clogit.squeeze(1)
-        a2f_attn = a2f_attn.squeeze(0)
+        # Frame branch predictions (T, 1, num_labels)
+        fbranch_prob = torch.sigmoid(self.frame_clogit.squeeze(1))
+
+        # Action branch predictions (num_tokens, 1, num_labels)
+        action_clogit = self.action_clogit.squeeze(1)
+        a2f_attn = self.a2f_attn.squeeze(0)
+        
+        # Check which tokens have predictions (any label > 0.5)
         qtk_cpred = (torch.sigmoid(action_clogit) > 0.5).float()
         has_action = qtk_cpred.sum(1) > 0
         action_loc = torch.where(has_action)[0]
 
         if len(action_loc) == 0:
+            # No action tokens, use frame branch only
             return (fbranch_prob > 0.5).long()
 
+        # Get action branch predictions
         qtk_prob = torch.sigmoid(action_clogit)
         action_pred = a2f_attn[:, action_loc].argmax(-1)
         action_pred = action_loc[action_pred]
         abranch_prob = qtk_prob[action_pred]
 
+        # Combine predictions
         prob = (1-weight) * abranch_prob + weight * fbranch_prob
         return (prob > 0.5).long()
 
-    @staticmethod
-    def _eval_w_transcript(transcript, a2f_attn, frame_clogit, weight):
-        fbranch_prob = torch.sigmoid(frame_clogit.squeeze(1))
-        fbranch_prob = fbranch_prob[:, transcript] 
-
-        N = len(transcript)
-        a2f_attn = a2f_attn[0, :, :N]
-        abranch_prob = torch.softmax(a2f_attn, dim=-1)
-
-        prob = (1-weight) * abranch_prob + weight * fbranch_prob
-        pred = prob.argmax(1)
-        pred = transcript[pred]
-        return pred
-
+    # Keep old eval for compatibility (won't be used for multilabel)
     def eval(self, transcript=None):
-        if not self.cfg.FACT.trans:
-            return self._eval(self.action_clogit, self.a2f_attn, self.frame_clogit, self.cfg.FACT.mwt)
-        else:
-            return self._eval_w_transcript(transcript, self.a2f_attn, self.frame_clogit, self.cfg.FACT.mwt)
+        return self.eval_multilabel()
 
 
 class InputBlock(Block):
@@ -241,7 +225,6 @@ class InputBlock(Block):
         super().__init__()
         self.cfg = cfg
         self.nclass = nclass
-
         cfg = cfg.Bi
 
         self.frame_branch = self.create_fbranch(cfg, in_dim, f_inmap=True)
@@ -259,6 +242,7 @@ class InputBlock(Block):
         # save features for loss and evaluation
         self.frame_clogit = frame_clogit 
         self.action_clogit = action_clogit
+        self.a2f_attn = torch.ones(1, frame_clogit.shape[0], action_clogit.shape[0]).to(frame_clogit.device) / action_clogit.shape[0]
 
         return frame_feature, action_feature
 
@@ -278,19 +262,11 @@ class UpdateBlock(Block):
         super().__init__()
         self.cfg = cfg
         self.nclass = nclass
-
         cfg = cfg.Bu
 
-        # fbranch
         self.frame_branch = self.create_fbranch(cfg)
-
-        # f2a: query is action
         self.f2a_layer = self.create_cross_attention(cfg, cfg.a_dim)
-
-        # abranch
         self.action_branch = self.create_abranch(cfg)
-
-        # a2f: query is frame
         self.a2f_layer = self.create_cross_attention(cfg, cfg.f_dim)
 
     def forward(self, frame_feature, action_feature, frame_pos, action_pos):
@@ -323,7 +299,6 @@ class UpdateBlock(Block):
         f2a_loss = criterion.cross_attn_loss(match, torch.transpose(self.f2a_attn_logit, 1, 2), dim=1)
         a2f_loss = criterion.cross_attn_loss(match, self.a2f_attn_logit, dim=2)
 
-        # temporal smoothing loss
         from .loss_multilabel import smooth_loss_multilabel
         al = smooth_loss_multilabel( self.a2f_attn_logit )
         fl = smooth_loss_multilabel( torch.transpose(self.f2a_attn_logit, 1, 2) )
@@ -343,34 +318,20 @@ class UpdateBlockTDU(Block):
         super().__init__()
         self.cfg = cfg
         self.nclass = nclass
-
         cfg = cfg.BU
 
-        # fbranch
         self.frame_branch = self.create_fbranch(cfg)
-
-        # layers for temporal downsample and upsample
         self.seg_update = nn.GRU(cfg.hid_dim, cfg.hid_dim//2, cfg.s_layers, bidirectional=True)
         self.seg_combine = nn.Linear(cfg.hid_dim, cfg.hid_dim)
-
-        # f2a: query is action
         self.f2a_layer = self.create_cross_attention(cfg, cfg.a_dim)
-
-        # abranch
         self.action_branch = self.create_abranch(cfg)
-
-        # a2f: query is frame
         self.a2f_layer = self.create_cross_attention(cfg, cfg.f_dim)
-
-        # layers for temporal downsample and upsample
         self.sf_merge = nn.Sequential(nn.Linear((cfg.hid_dim+cfg.f_dim), cfg.f_dim), nn.ReLU())
 
-
     def temporal_downsample(self, frame_feature):
-
-        # get action segments based on predictions
+        # get action segments based on predictions (use first label for segmentation)
         cprob = frame_feature[:, :, -self.nclass:]
-        pred = (cprob[:, 0] > 0.5).long()
+        pred = (cprob[:, 0, 0] > 0.5).long()
         pred = utils.to_numpy(pred)
         segs = utils.parse_label(pred)
 
@@ -389,39 +350,26 @@ class UpdateBlockTDU(Block):
         return tdu, seg_feature, seg_clogit
 
     def temporal_upsample(self, tdu, seg_feature, frame_feature):
-
-        # upsample segments to frames
         s2f = tdu.feature_seg2frame(seg_feature)
-        
-        # merge with original framewise features to keep low-level details
         frame_feature = self.sf_merge(torch.cat([s2f, frame_feature], dim=-1))
-
         return frame_feature
 
     def forward(self, frame_feature, action_feature, frame_pos, action_pos):
-        # downsample frame features to segment features
         tdu, seg_feature, seg_clogit = self.temporal_downsample(frame_feature)
 
-        # f->a
         seg_center = torch.LongTensor([ int( (s.start+s.end)/2 ) for s in tdu.segs ]).to(seg_feature.device)
         seg_pos = frame_pos[seg_center]
         action_feature = self.f2a_layer(seg_feature, action_feature, X_pos=seg_pos, Y_pos=action_pos)
 
-        # a branch
         action_feature = self.action_branch(action_feature, action_pos)
         action_feature, action_clogit = self.process_feature(action_feature, self.nclass)
 
-        # a->f
         seg_feature = self.a2f_layer(action_feature, seg_feature, X_pos=action_pos, Y_pos=seg_pos)
-
-        # upsample segment features to frame features
         frame_feature = self.temporal_upsample(tdu, seg_feature, frame_feature)
 
-        # f branch
         frame_feature = self.frame_branch(frame_feature)
         frame_feature, frame_clogit = self.process_feature(frame_feature, self.nclass)
 
-        # save features for loss and evaluation       
         self.frame_clogit = frame_clogit 
         self.seg_clogit = seg_clogit
         self.tdu = tdu

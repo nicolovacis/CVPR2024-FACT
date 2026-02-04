@@ -2264,3 +2264,156 @@ Processing video 8/32: ID08
       Progress: 74500/94691 frames (78.7%)
       Progress: 75000/94691 frames (79.2%)
       Progress: 75500/94691 frames (79.7%)
+      Progress: 76000/94691 frames (80.3%)
+      Progress: 76500/94691 frames (80.8%)
+      Progress: 77000/94691 frames (81.3%)
+      Progress: 77500/94691 frames (81.8%)
+      Progress: 78000/94691 frames (82.4%)
+      Progress: 78500/94691 frames (82.9%)
+      Progress: 79000/94691 frames (83.4%)
+      Progress: 79500/94691 frames (84.0%)
+      Progress: 80000/94691 frames (84.5%)
+      Progress: 80500/94691 frames (85.0%)
+      Progress: 81000/94691 frames (85.5%)
+      Progress: 81500/94691 frames (86.1%)
+      Progress: 82000/94691 frames (86.6%)
+      Progress: 82500/94691 frames (87.1%)
+      Progress: 83000/94691 frames (87.7%)
+      Progress: 83500/94691 frames (88.2%)
+      Progress: 84000/94691 frames (88.7%)
+      Progress: 84500/94691 frames (89.2%)
+      Progress: 85000/94691 frames (89.8%)
+      Progress: 85500/94691 frames (90.3%)
+      Progress: 86000/94691 frames (90.8%)
+      Progress: 86500/94691 frames (91.3%)
+      Progress: 87000/94691 frames (91.9%)
+      Progress: 87500/94691 frames (92.4%)
+      Progress: 88000/94691 frames (92.9%)
+      Progress: 88500/94691 frames (93.5%)
+      Progress: 89000/94691 frames (94.0%)
+      Progress: 89500/94691 frames (94.5%)
+      Progress: 90000/94691 frames (95.0%)
+      Progress: 90500/94691 frames (95.6%)
+      Progress: 91000/94691 frames (96.1%)
+      Progress: 91500/94691 frames (96.6%)
+      Progress: 92000/94691 frames (97.2%)
+      Progress: 92500/94691 frames (97.7%)
+      Progress: 93000/94691 frames (98.2%)
+      Progress: 93500/94691 frames (98.7%)
+      Progress: 94000/94691 frames (99.3%)
+      Progress: 94500/94691 frames (99.8%)
+      WARNING: 200 consecutive frame read failures
+      Breaking loop at frame 94688/94691
+      Frames successfully read: 94688
+      Total missed frames: 200
+      ───────────────────────────────────────────────────────
+      FRAME READING COMPLETE
+      ───────────────────────────────────────────────────────
+      Expected frames: 94691
+      Frames read: 94688
+      Frames missing: 200
+      WARNING: 200 frames could not be read!
+      WARNING: Read fewer frames than expected (94688/94691)
+      This may be due to video corruption or codec issues
+      ───────────────────────────────────────────────────────
+
+      ───────────────────────────────────────────────────────
+      EXTRACTING FEATURES PER SECOND
+      ───────────────────────────────────────────────────────
+      Total seconds to process: 3788
+        Second 100/3788
+        Second 200/3788
+        Second 300/3788
+        Second 400/3788
+        Second 500/3788
+        Second 600/3788
+        Second 700/3788
+        Second 800/3788
+        Second 900/3788
+        Second 1000/3788
+        Second 1100/3788
+        Second 1200/3788
+        Second 1300/3788
+        Second 1400/3788
+        Second 1500/3788
+        Second 1600/3788
+        Second 1700/3788
+        Second 1800/3788
+        Second 1900/3788
+        Second 2000/3788
+        Second 2100/3788
+        Second 2200/3788
+        Second 2300/3788
+        Second 2400/3788
+        Second 2500/3788
+        Second 2600/3788
+        Second 2700/3788
+        Second 2800/3788
+        Second 2900/3788
+        Second 3000/3788
+        Second 3100/3788
+        Second 3200/3788
+        Second 3300/3788
+        Second 3400/3788
+        Second 3500/3788
+        Second 3600/3788
+        Second 3700/3788
+      ───────────────────────────────────────────────────────
+      FEATURE EXTRACTION COMPLETE
+      ───────────────────────────────────────────────────────
+      Final features shape: (3788, 512)
+
+[ID08]   Features extracted: (3788, 512)
+[ID08] Step 2/3: Converting to multi-label format...
+[ID08] ERROR processing labels: 'start_sec'
+
+================================================================================
+Processing video 9/32: ID09
+================================================================================
+[ID09] Found label file: 25-021_ID09.csv
+[ID09] Step 1/3: Extracting features...
+      Opening video file...
+
+      ═══════════════════════════════════════════════════════
+      VIDEO PROPERTIES
+      ═══════════════════════════════════════════════════════
+      FPS detected: 25.00
+      Clip length (auto): 25 frames
+      Total frames: 93688
+      Duration: 3747.52 seconds
+      Expected seconds: 3748
+      Frames per second: ~25.0
+      ═══════════════════════════════════════════════════════
+
+      Using ORIGINAL FPS with per-second aggregation
+      Aggregation method: mean
+      ───────────────────────────────────────────────────────
+      READING ALL FRAMES FROM VIDEO
+      ───────────────────────────────────────────────────────
+      Progress: 500/93688 frames (0.5%)
+      Progress: 1000/93688 frames (1.1%)
+      Progress: 1500/93688 frames (1.6%)
+      Progress: 2000/93688 frames (2.1%)
+      Progress: 2500/93688 frames (2.7%)
+      Progress: 3000/93688 frames (3.2%)
+      Progress: 3500/93688 frames (3.7%)
+      Progress: 4000/93688 frames (4.3%)
+      Progress: 4500/93688 frames (4.8%)
+      Progress: 5000/93688 frames (5.3%)
+      Progress: 5500/93688 frames (5.9%)
+      Progress: 6000/93688 frames (6.4%)
+      Progress: 6500/93688 frames (6.9%)
+      Progress: 7000/93688 frames (7.5%)
+      Progress: 7500/93688 frames (8.0%)
+      Progress: 8000/93688 frames (8.5%)
+      Progress: 8500/93688 frames (9.1%)
+      Progress: 9000/93688 frames (9.6%)
+      Progress: 9500/93688 frames (10.1%)
+      Progress: 10000/93688 frames (10.7%)
+      Progress: 10500/93688 frames (11.2%)
+      Progress: 11000/93688 frames (11.7%)
+      Progress: 11500/93688 frames (12.3%)
+      Progress: 12000/93688 frames (12.8%)
+      Progress: 12500/93688 frames (13.3%)
+      Progress: 13000/93688 frames (13.9%)
+      Progress: 13500/93688 frames (14.4%)

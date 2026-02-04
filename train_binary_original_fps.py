@@ -8,10 +8,12 @@ from torch import optim
 import torch
 import wandb
 
+from .utils.dataset import DataLoader, create_dataset
 from .utils.evaluate import Checkpoint
 from .home import get_project_base
 from .configs.utils import cfg2flatdict, setup_cfg
 from .utils.train_tools import resume_ckpt, compute_null_weight, save_results
+from .models.loss import MatchCriterion
 from .utils.visualize_temporal_segmentation import plot_multiple_videos_summary
 
 def evaluate(global_step, net, testloader, run, savedir, logdir=None, visualize=True):
@@ -34,6 +36,7 @@ def evaluate(global_step, net, testloader, run, savedir, logdir=None, visualize=
     log_dict = {}
     string = ""
     for k, v in ckpt.metrics.items():
+        # Format output string (only show overall metrics in console)
         if '/' not in k or k.startswith('F1@'):
             string += "%s:%.1f, " % (k, v)
         log_dict[f'test-metric/{k}'] = v
@@ -45,17 +48,18 @@ def evaluate(global_step, net, testloader, run, savedir, logdir=None, visualize=
     fname = "%d.gz" % (global_step+1) 
     ckpt.save(os.path.join(savedir, fname))
 
+    # Generate temporal segmentation visualizations
     if visualize and logdir is not None:
         try:
             vis_dir = os.path.join(logdir, 'visualizations', f'iter_{global_step+1}')
-            class_names = ['background', 'licking']
+            class_names = ['background', 'licking']  # For Stanford binary dataset
             print(f"\nGenerating temporal segmentation visualizations...")
             plot_multiple_videos_summary(
                 checkpoint=ckpt,
                 save_dir=vis_dir,
                 class_names=class_names,
-                max_videos=None,
-                max_frames_per_video=None
+                max_videos=None,  # Plot all test videos
+                max_frames_per_video=None  # Show all frames
             )
             print(f"✓ Visualizations saved to: {vis_dir}\n")
         except Exception as e:
@@ -93,10 +97,12 @@ if __name__ == '__main__':
         torch.cuda.manual_seed_all(seed)
         torch.backends.cudnn.deterministic = True
 
+    #logdir = os.path.join(BASE, cfg.aux.logdir)
+    # -- NEW
     logdir = cfg.aux.logdir
     os.makedirs(logdir, exist_ok=True)
     print(f"Using logdir: {logdir}")
-    
+    # --
     ckptdir = os.path.join(logdir, 'ckpts')
     savedir = os.path.join(logdir, 'saves')
     os.makedirs(logdir, exist_ok=True)
@@ -107,6 +113,7 @@ if __name__ == '__main__':
     try:
         run = wandb.init(
                     project=cfg.aux.wandb_project, entity=cfg.aux.wandb_user,
+                    #dir=cfg.aux.logdir,
                     dir=logdir,
                     group=cfg.aux.exp, resume="allow",
                     config=cfg2flatdict(cfg),
@@ -122,19 +129,7 @@ if __name__ == '__main__':
         json.dump(cfg, f, indent=True)
 
     ### load dataset #########################################################
-    # MULTILABEL SUPPORT: Check dataset type and load accordingly
-    is_multilabel = (cfg.dataset == 'stanford_multilabel')
-    
-    if is_multilabel:
-        print("\n" + "="*80)
-        print("LOADING MULTI-LABEL DATASET")
-        print("="*80)
-        from .utils.dataset_multilabel import DataLoader, create_multilabel_dataset
-        dataset, test_dataset = create_multilabel_dataset(cfg)
-    else:
-        from .utils.dataset import DataLoader, create_dataset
-        dataset, test_dataset = create_dataset(cfg)
-    
+    dataset, test_dataset = create_dataset(cfg)
     if not cfg.aux.debug:
         trainloader = DataLoader(dataset, batch_size=cfg.batch_size, shuffle=True)
     else:
@@ -147,24 +142,13 @@ if __name__ == '__main__':
     if cfg.dataset == 'epic':
         from .models.blocks_SepVerbNoun import FACT
         net = FACT(cfg, dataset.input_dimension, 98, 301)
-    elif is_multilabel:
-        from .models.blocks_multilabel import FACT
-        net = FACT(cfg, dataset.input_dimension, dataset.nclasses)
-        print(f"Multi-label model: {dataset.nclasses} independent labels")
     else:
         from .models.blocks import FACT
         net = FACT(cfg, dataset.input_dimension, dataset.nclasses)
 
-    # MULTILABEL SUPPORT: Use appropriate criterion
-    if is_multilabel:
-        from .models.loss_multilabel import MultiLabelMatchCriterion
-        net.mcriterion = MultiLabelMatchCriterion(cfg, dataset.nclasses, dataset.bg_class)
-        print("Using Multi-Label BCE Loss")
-    else:
-        from .models.loss import MatchCriterion
-        if cfg.Loss.nullw == -1:
-            compute_null_weight(cfg, dataset)
-        net.mcriterion = MatchCriterion(cfg, dataset.nclasses, dataset.bg_class)
+    if cfg.Loss.nullw == -1:
+        compute_null_weight(cfg, dataset)
+    net.mcriterion = MatchCriterion(cfg, dataset.nclasses, dataset.bg_class)
 
     global_step, ckpt_file = resume_ckpt(cfg, logdir)
     if ckpt_file is not None:
@@ -206,6 +190,7 @@ if __name__ == '__main__':
 
             save_results(ckpt, vnames, eval_label_list, video_saves)
 
+            # print some progress information
             if (global_step+1) % cfg.aux.print_every == 0:
 
                 ckpt.compute_metrics()
@@ -230,6 +215,8 @@ if __name__ == '__main__':
 
                 ckpt = Checkpoint(-1, bg_class=([] if net.cfg.eval_bg else testloader.dataset.bg_class), eval_edit=False)
 
+
+            # test and save model every x iterations
             if global_step != 0 and (global_step+1) % cfg.aux.eval_every == 0:
                 test_ckpt = evaluate(global_step, net, testloader, run, savedir, logdir=logdir, visualize=True)
                 if test_ckpt.metrics['F1@0.50'] >= best_metric:
@@ -251,6 +238,7 @@ if __name__ == '__main__':
     best_ckpt.compute_metrics()
     best_ckpt.save(os.path.join(logdir, 'best_ckpt.gz'))
     
+    # Generate final visualizations for best checkpoint
     try:
         final_vis_dir = os.path.join(logdir, 'visualizations', 'final_best')
         class_names = ['background', 'licking']
@@ -269,5 +257,6 @@ if __name__ == '__main__':
     if run is not None:
         run.finish()
 
+    # create a file to mark this experiment has completed
     finish_proof_fname = os.path.join(logdir, "FINISH_PROOF")
     open(finish_proof_fname, "w").close()

@@ -1,397 +1,380 @@
+"""
+Modified loss functions for multi-label classification
+
+Key changes:
+1. Use Binary Cross Entropy (BCE) instead of Cross Entropy
+2. Each label is predicted independently with sigmoid activation
+3. Support multiple active labels per frame
+4. FIXED: Proper positive class weighting for imbalanced data
+"""
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from . import basic as basic
-from ..utils import utils
-from ..configs.utils import update_from
-from . import loss
-from .loss_multilabel import MultiLabelMatchCriterion, logit2prob_multilabel
-from .basic import time_mask
+import numpy as np
+from scipy.optimize import linear_sum_assignment
 
-class FACT(nn.Module):
 
-    def __init__(self, cfg, in_dim, n_classes):
-        super().__init__()
+def smooth_loss_multilabel(logit):
+    """
+    Smoothness loss for multi-label predictions
+    logit: B, T, num_labels
+    """
+    loss = torch.clamp((logit[:, 1:] - logit[:, :-1])**2, min=0, max=16)
+    loss = loss.mean()
+    return loss
+
+
+def torch_multilabel_to_segments(label):
+    """
+    Convert multi-label frame annotations to action segments
+    
+    For multi-label, we need to handle combinations of labels as separate "actions"
+    E.g., [1,0], [0,1], [1,1] are three different action types
+    
+    Args:
+        label: (T, num_labels) binary array (can be float or long)
+    
+    Returns:
+        transcript: unique action combinations in order
+        segment_label: segment ID for each frame
+    """
+    # Convert multi-label to single composite label
+    # E.g., [1, 0] -> 1, [0, 1] -> 2, [1, 1] -> 3, [0, 0] -> 0
+    num_labels = label.shape[1]
+    composite_label = torch.zeros(label.shape[0], dtype=torch.long, device=label.device)
+    
+    # Convert label to long type for proper integer operations
+    label_long = label.long()
+    
+    for i in range(num_labels):
+        composite_label += label_long[:, i] * (2 ** i)
+    
+    # Now use standard segment extraction
+    segment_label = torch.zeros_like(composite_label)
+    current = composite_label[0]
+    transcript = [current]
+    aid = 0
+    
+    for i, l in enumerate(composite_label):
+        if l == current:
+            pass
+        else:
+            current = l
+            aid += 1
+            transcript.append(l)
+        segment_label[i] = aid
+    
+    transcript = torch.stack(transcript).to(label.device)
+    return transcript, segment_label
+
+
+class MultiLabelMatchCriterion():
+    """
+    Matching criterion for multi-label temporal action segmentation
+    """
+    
+    def __init__(self, cfg, nclasses, bg_ids=[], class_weight=None):
         self.cfg = cfg
-        self.num_classes = n_classes
-
-        base_cfg = cfg.Bi
-        self.frame_pe = basic.PositionalEncoding(base_cfg.hid_dim, max_len=10000, empty=(not cfg.FACT.fpos) )
-        self.channel_masking_dropout = nn.Dropout2d(p=cfg.FACT.cmr)
-
-        if not cfg.FACT.trans:
-            self.action_query = nn.Parameter(torch.randn([cfg.FACT.ntoken, 1, base_cfg.a_dim]))
-        else:
-            self.action_pe = basic.PositionalEncoding(base_cfg.a_dim, max_len=1000)
-            self.action_embed = nn.Embedding(n_classes, base_cfg.a_dim)
-
-        # block configuration
-        block_list = []
-        for i, t in enumerate(cfg.FACT.block):
-            if t == 'i':
-                block = InputBlock(cfg, in_dim, n_classes)
-            elif t == 'u':
-                update_from(cfg.Bu, base_cfg, inplace=True)
-                base_cfg = cfg.Bu
-                block = UpdateBlock(cfg, n_classes)
-            elif t == 'U':
-                update_from(cfg.BU, base_cfg, inplace=True)
-                base_cfg = cfg.BU
-                block = UpdateBlockTDU(cfg, n_classes)
-
-            block_list.append(block)
-
-        self.block_list = nn.ModuleList(block_list)
-        self.mcriterion = None
-
-    def _forward_one_video(self, seq, transcript=None):
-        # prepare frame feature
-        frame_feature = seq
-        frame_pe = self.frame_pe(seq)
-        if self.cfg.FACT.cmr:
-            frame_feature = frame_feature.permute([1, 2, 0])
-            frame_feature = self.channel_masking_dropout(frame_feature)
-            frame_feature = frame_feature.permute([2, 0, 1])
-
-        if self.cfg.TM.use and self.training:
-            frame_feature = time_mask(frame_feature, 
-                        self.cfg.TM.t, self.cfg.TM.m, self.cfg.TM.p, 
-                        replace_with_zero=True)
-
-        # prepare action feature
-        if not self.cfg.FACT.trans:
-            action_pe = self.action_query
-            action_feature = torch.zeros_like(action_pe)
-        else:
-            action_pe = self.action_pe(transcript)
-            action_feature = self.action_embed(transcript).unsqueeze(1)
-            action_feature = action_feature + action_pe
-            action_pe = torch.zeros_like(action_pe)
-
-        # forward
-        block_output = []
-        for i, block in enumerate(self.block_list):
-            frame_feature, action_feature = block(frame_feature, action_feature, frame_pe, action_pe)
-            block_output.append([frame_feature, action_feature])
-        return block_output
-
-    def _loss_one_video(self, label):
-        mcriterion: MultiLabelMatchCriterion = self.mcriterion
-        mcriterion.set_label(label)
-
-        block : Block = self.block_list[-1]
-        cprob = logit2prob_multilabel(block.action_clogit, dim=-1)
-        match = mcriterion.match(cprob, block.a2f_attn)
-
-        loss_list = []
-        for block in self.block_list:
-            loss = block.compute_loss(mcriterion, match)
-            loss_list.append(loss)
-
-        self.loss_list = loss_list
-        final_loss = sum(loss_list) / len(loss_list)
-        return final_loss
-
-    def forward(self, seq_list, label_list, compute_loss=False):
-        save_list = []
-        final_loss = []
-
-        for i, (seq, label) in enumerate(zip(seq_list, label_list)):
-            seq = seq.unsqueeze(1)
-            # For multi-label, we don't use transcript
-            self._forward_one_video(seq, transcript=None)
-
-            pred = self.block_list[-1].eval_multilabel()
-            save_data = {'pred': utils.to_numpy(pred)}
-            save_list.append(save_data)
-
-            if compute_loss:
-                loss = self._loss_one_video(label)
-                final_loss.append(loss)
-                save_data['loss'] = { 'loss': loss.item() }
-
-        if compute_loss:
-            final_loss = sum(final_loss) / len(final_loss)
-            return final_loss, save_list
-        else:
-            return save_list
-
-    def save_model(self, fname):
-        torch.save(self.state_dict(), fname)
-
-####################################################################
-# Blocks
-
-class Block(nn.Module):
-    """
-    Base Block class for common functions
-    """
-
-    def __init__(self):
-        super().__init__()
-
-    def __str__(self):
-        lines = f"{type(self).__name__}(\n  f:{self.frame_branch},\n  a:{self.action_branch},\n  a2f:{self.a2f_layer if hasattr(self, 'a2f_layer') else None},\n  f2a:{self.f2a_layer if hasattr(self, 'f2a_layer') else None}\n)"
-        return lines
-
-    def __repr__(self):
-        return str(self)
-
-    def process_feature(self, feature, nclass):
-        # use the last several dimension as logit of action classes
-        clogit = feature[:, :, -nclass:]
-        feature = feature[:, :, :-nclass]
-        cprob = logit2prob_multilabel(clogit, dim=-1)
-        feature = torch.cat([feature, cprob], dim=-1)
-        return feature, clogit
-
-    def create_fbranch(self, cfg, in_dim=None, f_inmap=False):
-        if in_dim is None:
-            in_dim = cfg.f_dim
-
-        if cfg.f == 'm':
-            frame_branch = basic.MSTCN(in_dim, cfg.f_dim, cfg.hid_dim, cfg.f_layers, 
-                                dropout=cfg.dropout, ln=cfg.f_ln, ngroup=cfg.f_ngp, in_map=f_inmap)
-        elif cfg.f == 'm2':
-            frame_branch = basic.MSTCN2(in_dim, cfg.f_dim, cfg.hid_dim, cfg.f_layers, 
-                                dropout=cfg.dropout, ln=cfg.f_ln, ngroup=cfg.f_ngp, in_map=f_inmap)
-
-        return frame_branch
-
-    def create_abranch(self, cfg):
-        if cfg.a == 'sa':
-            l = basic.SALayer(cfg.a_dim, cfg.a_nhead, dim_feedforward=cfg.a_ffdim, dropout=cfg.dropout, attn_dropout=cfg.dropout)
-            action_branch = basic.SADecoder(cfg.a_dim, cfg.a_dim, cfg.hid_dim, l, cfg.a_layers, in_map=False)
-        elif cfg.a == 'sca':
-            layer = basic.SCALayer(cfg.a_dim, cfg.hid_dim, cfg.a_nhead, cfg.a_ffdim, dropout=cfg.dropout, attn_dropout=cfg.dropout)
-            norm = torch.nn.LayerNorm(cfg.a_dim)
-            action_branch = basic.SCADecoder(cfg.a_dim, cfg.a_dim, cfg.hid_dim, layer, cfg.a_layers, norm=norm, in_map=False)
-        elif cfg.a in ['gru', 'gru_om']:
-            assert self.cfg.FACT.trans
-            out_map = (cfg.a == 'gru_om')
-            action_branch = basic.ActionUpdate_GRU(cfg.a_dim, cfg.a_dim, cfg.hid_dim, cfg.a_layers, dropout=cfg.dropout, out_map=out_map)
-        else:
-            raise ValueError(cfg.a)
-
-        return action_branch
-
-    def create_cross_attention(self, cfg, outdim, kq_pos=True):
-        layer = basic.X2Y_map(cfg.hid_dim, cfg.hid_dim, outdim, 
-            head_dim=cfg.hid_dim,
-            dropout=cfg.dropout, kq_pos=kq_pos)
-        return layer
-
-    def eval_multilabel(self, weight=None):
+        self.nclasses = nclasses  # Number of label types (e.g., 2 for licking/shaking)
+        self.bg_ids = bg_ids
+        self._class_weight = class_weight
+    
+    def set_label(self, label):
         """
-        Evaluation for multi-label predictions
-        Returns: (T, num_labels) with values 0 or 1
+        Set ground truth label
+        
+        Args:
+            label: (T, num_labels) binary tensor
         """
-        if weight is None:
-            weight = self.cfg.FACT.mwt
-
-        # Frame branch predictions (T, 1, num_labels)
-        fbranch_prob = torch.sigmoid(self.frame_clogit.squeeze(1))
-
-        # Action branch predictions (num_tokens, 1, num_labels)
-        action_clogit = self.action_clogit.squeeze(1)
-        a2f_attn = self.a2f_attn.squeeze(0)
+        self.multilabel = label  # Store original multi-label
         
-        # Check which tokens have predictions (any label > 0.5)
-        qtk_cpred = (torch.sigmoid(action_clogit) > 0.5).float()
-        has_action = qtk_cpred.sum(1) > 0
-        action_loc = torch.where(has_action)[0]
-
-        if len(action_loc) == 0:
-            # No action tokens, use frame branch only
-            return (fbranch_prob > 0.5).long()
-
-        # Get action branch predictions
-        qtk_prob = torch.sigmoid(action_clogit)
-        action_pred = a2f_attn[:, action_loc].argmax(-1)
-        action_pred = action_loc[action_pred]
-        abranch_prob = qtk_prob[action_pred]
-
-        # Combine predictions
-        prob = (1-weight) * abranch_prob + weight * fbranch_prob
-        return (prob > 0.5).long()
-
-    # Keep old eval for compatibility (won't be used for multilabel)
-    def eval(self, transcript=None):
-        return self.eval_multilabel()
-
-
-class InputBlock(Block):
-    def __init__(self, cfg, in_dim, nclass):
-        super().__init__()
-        self.cfg = cfg
-        self.nclass = nclass
-        cfg = cfg.Bi
-
-        self.frame_branch = self.create_fbranch(cfg, in_dim, f_inmap=True)
-        self.action_branch = self.create_abranch(cfg)
-
-    def forward(self, frame_feature, action_feature, frame_pos, action_pos, action_clogit=None):
-        # frame branch
-        frame_feature = self.frame_branch(frame_feature)
-        frame_feature, frame_clogit = self.process_feature(frame_feature, self.nclass)
-
-        # action branch
-        action_feature = self.action_branch(action_feature, frame_feature, pos=frame_pos, query_pos=action_pos)
-        action_feature, action_clogit = self.process_feature(action_feature, self.nclass)
+        # Convert to composite segments for matching
+        self.transcript, self.seg_label = torch_multilabel_to_segments(label)
         
-        # save features for loss and evaluation
-        self.frame_clogit = frame_clogit 
-        self.action_clogit = action_clogit
-        self.a2f_attn = torch.ones(1, frame_clogit.shape[0], action_clogit.shape[0]).to(frame_clogit.device) / action_clogit.shape[0]
-
-        return frame_feature, action_feature
-
-    def compute_loss(self, criterion: MultiLabelMatchCriterion, match=None):
-        frame_loss = criterion.frame_loss(self.frame_clogit.squeeze(1))
-        atk_loss = criterion.action_token_loss(match, self.action_clogit)
-
-        frame_clogit = torch.transpose(self.frame_clogit, 0, 1) 
-        from .loss_multilabel import smooth_loss_multilabel
-        smooth_loss = smooth_loss_multilabel(frame_clogit)
-
-        return frame_loss + atk_loss + self.cfg.Loss.sw * smooth_loss
-
-class UpdateBlock(Block):
-
-    def __init__(self, cfg, nclass):
-        super().__init__()
-        self.cfg = cfg
-        self.nclass = nclass
-        cfg = cfg.Bu
-
-        self.frame_branch = self.create_fbranch(cfg)
-        self.f2a_layer = self.create_cross_attention(cfg, cfg.a_dim)
-        self.action_branch = self.create_abranch(cfg)
-        self.a2f_layer = self.create_cross_attention(cfg, cfg.f_dim)
-
-    def forward(self, frame_feature, action_feature, frame_pos, action_pos):
-        # a->f
-        action_feature = self.f2a_layer(frame_feature, action_feature, X_pos=frame_pos, Y_pos=action_pos)
-
-        # a branch
-        action_feature = self.action_branch(action_feature, action_pos)
-        action_feature, action_clogit = self.process_feature(action_feature, self.nclass)
-
-        # f->a
-        frame_feature = self.a2f_layer(action_feature, frame_feature, X_pos=action_pos, Y_pos=frame_pos)
-
-        # f branch
-        frame_feature = self.frame_branch(frame_feature)
-        frame_feature, frame_clogit = self.process_feature(frame_feature, self.nclass)
-
-        # save features for loss and evaluation
-        self.frame_clogit = frame_clogit 
-        self.action_clogit = action_clogit 
-        self.f2a_attn = self.f2a_layer.attn[0]
-        self.a2f_attn = self.a2f_layer.attn[0]
-        self.f2a_attn_logit = self.f2a_layer.attn_logit[0].unsqueeze(0)
-        self.a2f_attn_logit = self.a2f_layer.attn_logit[0].unsqueeze(0)
-        return frame_feature, action_feature
-
-    def compute_loss(self, criterion: MultiLabelMatchCriterion, match=None):
-        frame_loss = criterion.frame_loss(self.frame_clogit.squeeze(1)) 
-        atk_loss = criterion.action_token_loss(match, self.action_clogit)
-        f2a_loss = criterion.cross_attn_loss(match, torch.transpose(self.f2a_attn_logit, 1, 2), dim=1)
-        a2f_loss = criterion.cross_attn_loss(match, self.a2f_attn_logit, dim=2)
-
-        from .loss_multilabel import smooth_loss_multilabel
-        al = smooth_loss_multilabel( self.a2f_attn_logit )
-        fl = smooth_loss_multilabel( torch.transpose(self.f2a_attn_logit, 1, 2) )
-        frame_clogit = torch.transpose(self.frame_clogit, 0, 1)
-        l = smooth_loss_multilabel( frame_clogit )
-        smooth_loss = al + fl + l
-
-        return atk_loss + f2a_loss + a2f_loss + frame_loss + self.cfg.Loss.sw * smooth_loss
-
-
-class UpdateBlockTDU(Block):
-    """
-    Update Block with Temporal Downsampling and Upsampling
-    """
-
-    def __init__(self, cfg, nclass):
-        super().__init__()
-        self.cfg = cfg
-        self.nclass = nclass
-        cfg = cfg.BU
-
-        self.frame_branch = self.create_fbranch(cfg)
-        self.seg_update = nn.GRU(cfg.hid_dim, cfg.hid_dim//2, cfg.s_layers, bidirectional=True)
-        self.seg_combine = nn.Linear(cfg.hid_dim, cfg.hid_dim)
-        self.f2a_layer = self.create_cross_attention(cfg, cfg.a_dim)
-        self.action_branch = self.create_abranch(cfg)
-        self.a2f_layer = self.create_cross_attention(cfg, cfg.f_dim)
-        self.sf_merge = nn.Sequential(nn.Linear((cfg.hid_dim+cfg.f_dim), cfg.f_dim), nn.ReLU())
-
-    def temporal_downsample(self, frame_feature):
-        # get action segments based on predictions (use first label for segmentation)
-        cprob = frame_feature[:, :, -self.nclass:]
-        pred = (cprob[:, 0, 0] > 0.5).long()
-        pred = utils.to_numpy(pred)
-        segs = utils.parse_label(pred)
-
-        tdu = basic.TemporalDownsampleUpsample(segs)
-        tdu.to(cprob.device)
-
-        # downsample frames to segments
-        seg_feature = tdu.feature_frame2seg(frame_feature)
-
-        # refine segment features
-        seg_feature, hidden = self.seg_update(seg_feature)
-        seg_feature = torch.relu(seg_feature)
-        seg_feature = self.seg_combine(seg_feature)
-        seg_feature, seg_clogit = self.process_feature(seg_feature, self.nclass)
-
-        return tdu, seg_feature, seg_clogit
-
-    def temporal_upsample(self, tdu, seg_feature, frame_feature):
-        s2f = tdu.feature_seg2frame(seg_feature)
-        frame_feature = self.sf_merge(torch.cat([s2f, frame_feature], dim=-1))
-        return frame_feature
-
-    def forward(self, frame_feature, action_feature, frame_pos, action_pos):
-        tdu, seg_feature, seg_clogit = self.temporal_downsample(frame_feature)
-
-        seg_center = torch.LongTensor([ int( (s.start+s.end)/2 ) for s in tdu.segs ]).to(seg_feature.device)
-        seg_pos = frame_pos[seg_center]
-        action_feature = self.f2a_layer(seg_feature, action_feature, X_pos=seg_pos, Y_pos=action_pos)
-
-        action_feature = self.action_branch(action_feature, action_pos)
-        action_feature, action_clogit = self.process_feature(action_feature, self.nclass)
-
-        seg_feature = self.a2f_layer(action_feature, seg_feature, X_pos=action_pos, Y_pos=seg_pos)
-        frame_feature = self.temporal_upsample(tdu, seg_feature, frame_feature)
-
-        frame_feature = self.frame_branch(frame_feature)
-        frame_feature, frame_clogit = self.process_feature(frame_feature, self.nclass)
-
-        self.frame_clogit = frame_clogit 
-        self.seg_clogit = seg_clogit
-        self.tdu = tdu
-        self.action_clogit = action_clogit 
-
-        self.f2a_attn_logit = self.f2a_layer.attn_logit[0].unsqueeze(0)
-        self.f2a_attn = tdu.attn_seg2frame(self.f2a_layer.attn[0].transpose(2, 1)).transpose(2, 1)
-        self.a2f_attn_logit = self.a2f_layer.attn_logit[0].unsqueeze(0) 
-        self.a2f_attn = tdu.attn_seg2frame(self.a2f_layer.attn[0])
-
-        return frame_feature, action_feature
-
-    def compute_loss(self, criterion: MultiLabelMatchCriterion, match=None):
-        frame_loss = criterion.frame_loss(self.frame_clogit.squeeze(1))
-        seg_loss = criterion.segment_loss(self.seg_clogit.squeeze(1), self.tdu)
-        atk_loss = criterion.action_token_loss(match, self.action_clogit)
-        # Use TDU-specific cross attention loss for segment-level attention
-        f2a_loss = criterion.cross_attn_loss_tdu(match, torch.transpose(self.f2a_attn_logit, 1, 2), self.tdu, dim=1)
-        a2f_loss = criterion.cross_attn_loss_tdu(match, self.a2f_attn_logit, self.tdu, dim=2)
-
-        frame_clogit = torch.transpose(self.frame_clogit, 0, 1) 
-        from .loss_multilabel import smooth_loss_multilabel
-        smooth_loss = smooth_loss_multilabel( frame_clogit )
-
-        return (frame_loss + seg_loss)/ 2 + atk_loss + f2a_loss + a2f_loss + self.cfg.Loss.sw * smooth_loss
+        # Create one-hot encodings
+        self.onehot_seg_label = self._label_to_onehot(self.seg_label, len(self.transcript))
+        
+        # FIXED: Compute positive class weights based on actual class frequencies
+        label_weight = torch.ones(self.nclasses).to(label.device)
+        
+        if self._class_weight is not None:
+            # Use provided weights
+            for i in range(self.nclasses):
+                label_weight[i] = self._class_weight[i]
+        else:
+            # CRITICAL FIX: Auto-compute weights based on class imbalance
+            # pos_weight[i] = (num_negative_samples[i]) / (num_positive_samples[i])
+            # This helps BCE loss handle rare positive classes
+            for i in range(self.nclasses):
+                pos_count = label[:, i].sum().float()
+                neg_count = (1 - label[:, i]).sum().float()
+                
+                if pos_count > 0:
+                    # Weight for positive class = ratio of negative to positive
+                    # Add small epsilon to avoid division by zero
+                    weight = neg_count / (pos_count + 1e-6)
+                    # Clip weight to reasonable range [1, 100]
+                    label_weight[i] = torch.clamp(weight, min=1.0, max=100.0)
+                else:
+                    # No positive samples - keep weight as 1
+                    label_weight[i] = 1.0
+            
+            print(f"Auto-computed positive class weights: {label_weight.cpu().numpy()}")
+        
+        self.label_weight = label_weight
+        
+        # Create segment weights
+        sweight = torch.ones(len(self.transcript), dtype=torch.float32).to(label.device)
+        self.sweight = sweight
+    
+    def _label_to_onehot(self, label, nclass):
+        onehot_label = torch.zeros(len(label), nclass).to(label.device)
+        onehot_label[torch.arange(len(label)), label] = 1
+        return onehot_label
+    
+    @classmethod
+    def a2f_soft_iou(cls, a2f_attn, onehot_seg_label):
+        """
+        Compute soft IoU between action tokens and frame segments
+        
+        Args:
+            a2f_attn: (1, f, a) attention weights from frames to action tokens
+            onehot_seg_label: (f, num_segs) one-hot segment labels
+        
+        Returns:
+            iou: (a, num_segs) IoU matrix
+        """
+        # a2f_attn: (1, f, a) -> (f, a)
+        a2f_attn = a2f_attn[0]  # f, a
+        
+        a2f_attn_np = a2f_attn.cpu().numpy()  # (f, a)
+        onehot_seg_label_np = onehot_seg_label.cpu().numpy()  # (f, s)
+        
+        # Compute overlap: for each (action, segment) pair, sum of min(attn, label) over frames
+        # a2f_attn_np: (f, a) -> (f, a, 1)
+        # onehot_seg_label_np: (f, s) -> (f, 1, s)
+        attn_expanded = a2f_attn_np[:, :, np.newaxis]  # (f, a, 1)
+        label_expanded = onehot_seg_label_np[:, np.newaxis, :]  # (f, 1, s)
+        
+        # Compute overlap and union per (action, segment) pair
+        overlap = np.einsum('fa,fs->as', a2f_attn_np, onehot_seg_label_np)  # (a, s)
+        
+        # Union = sum over frames of max(attn, label) for each (a, s) pair
+        # But for soft IoU, we use: union = attn_sum + label_sum - overlap
+        attn_sum = a2f_attn_np.sum(0)[:, np.newaxis]  # (a, 1)
+        label_sum = onehot_seg_label_np.sum(0)[np.newaxis, :]  # (1, s)
+        union = attn_sum + label_sum - overlap  # (a, s)
+        
+        # Avoid division by zero
+        union = np.maximum(union, 1e-8)
+        iou = overlap / union
+        iou = np.nan_to_num(iou, nan=0.0, posinf=0.0, neginf=0.0)
+        
+        return iou
+    
+    def match(self, clogit, a2f_attn):
+        """
+        Match action tokens to ground truth segments
+        
+        For multi-label, clogit should be: (num_tokens, 1, num_labels)
+        where each label is predicted independently
+        """
+        assert clogit.shape[1] == 1  # batch_size == 1
+        
+        match_cfg = self.cfg.Loss
+        num_tokens = clogit.shape[0]
+        num_segs = len(self.transcript)
+        
+        # Sequential matching
+        if match_cfg.match == 'seq':
+            A = num_tokens
+            S = self.onehot_seg_label.shape[-1]
+            assert A >= S, (A, S)
+            action_ind = seg_ind = torch.as_tensor(list(range(S)), dtype=torch.int64)
+            return action_ind, seg_ind
+        
+        # Initialize cost matrix
+        cost = np.zeros((num_tokens, num_segs), dtype=np.float64)
+        
+        with torch.no_grad():
+            # For multi-label, we need to compute similarity differently
+            # Convert predictions to probabilities
+            prob = torch.sigmoid(clogit.squeeze(1))  # (num_tokens, num_labels)
+            
+            # Get ground truth labels for each segment
+            seg_multilabels = []
+            for s in range(num_segs):
+                seg_mask = (self.seg_label == s)
+                seg_label = self.multilabel[seg_mask].float().mean(0)  # Average over segment
+                seg_multilabels.append(seg_label)
+            seg_multilabels = torch.stack(seg_multilabels)  # (num_segs, num_labels)
+            
+            # Compute similarity (negative L2 distance)
+            if match_cfg.pc > 0:
+                prob_np = prob.cpu().numpy()  # (num_tokens, num_labels)
+                seg_np = seg_multilabels.cpu().numpy()  # (num_segs, num_labels)
+                
+                # L2 distance between token prediction and segment label
+                for a in range(num_tokens):
+                    for s in range(num_segs):
+                        dist = np.linalg.norm(prob_np[a] - seg_np[s])
+                        cost[a, s] -= match_cfg.pc * dist
+            
+            # Add attention-based cost
+            if match_cfg.a2fc > 0:
+                iou = self.a2f_soft_iou(a2f_attn, self.onehot_seg_label)
+                cost += match_cfg.a2fc * iou
+        
+        # Ensure cost matrix is valid before matching
+        cost = np.nan_to_num(cost, nan=0.0, posinf=1e10, neginf=-1e10)
+        
+        # Perform matching
+        if match_cfg.match == 'o2o':
+            action_ind, seg_ind = self._one_to_one_match(cost)
+        elif match_cfg.match == 'o2m':
+            action_ind, seg_ind = self._one_to_many_match(cost)
+        else:
+            raise NotImplementedError(match_cfg.match)
+        
+        return action_ind, seg_ind
+    
+    def _one_to_one_match(self, cost):
+        """One-to-one matching using Hungarian algorithm"""
+        action_ind, seg_ind = linear_sum_assignment(cost, maximize=True)
+        return action_ind, seg_ind
+    
+    def _one_to_many_match(self, cost):
+        """One-to-many matching (simplified for multi-label)"""
+        action_ind, seg_ind = linear_sum_assignment(cost)
+        return action_ind, seg_ind
+    
+    def action_token_loss(self, match, action_logit):
+        """
+        Multi-label BCE loss for action tokens
+        
+        Args:
+            match: (action_ind, seg_ind) matching
+            action_logit: (num_tokens, 1, num_labels) logits
+        """
+        aind, sind = match
+        A = action_logit.shape[0]
+        
+        # Create target labels for each token
+        target = torch.zeros(A, self.nclasses).to(action_logit.device)
+        
+        for ai, si in zip(aind, sind):
+            seg_mask = (self.seg_label == si)
+            seg_label = self.multilabel[seg_mask].float().mean(0)
+            target[ai] = seg_label
+        
+        # Binary cross entropy with logits
+        action_logit = action_logit.squeeze(1)  # (A, num_labels)
+        loss = F.binary_cross_entropy_with_logits(
+            action_logit, 
+            target,
+            pos_weight=self.label_weight
+        )
+        
+        return loss
+    
+    def cross_attn_loss(self, match, attn, dim=None):
+        """Cross attention loss (same as standard)"""
+        assert dim >= 1
+        onehot_seg_label = self.onehot_seg_label
+        aind, sind = match
+        
+        frame_tgt = onehot_seg_label[:, sind]  # f, s
+        attn = attn[0, :, aind]  # f, s
+        attn_logp = torch.log_softmax(attn, dim=dim-1)
+        loss = -attn_logp * frame_tgt
+        
+        if self.sweight is not None:
+            loss = loss * self.sweight
+        loss = loss.sum(1).sum() / self.onehot_seg_label.sum()
+        
+        return loss
+    
+    def cross_attn_loss_tdu(self, match, attn, tdu, dim=None):
+        """
+        Cross attention loss for TDU blocks where attention is at segment level
+        
+        Args:
+            match: (action_ind, seg_ind) matching
+            attn: (1, num_segs, num_matched_actions) attention logits
+            tdu: TemporalDownsampleUpsample object
+            dim: dimension for softmax
+        """
+        assert dim >= 1
+        onehot_seg_label = self.onehot_seg_label
+        aind, sind = match
+        
+        # Downsample frame-level one-hot labels to segment level
+        # f, num_transcript_segs -> tdu_num_segs, num_transcript_segs
+        zoomed_label = torch.zeros([tdu.num_seg, onehot_seg_label.shape[1]], 
+                                   dtype=onehot_seg_label.dtype).to(onehot_seg_label.device)
+        zoomed_label.index_add_(0, tdu.seg_label, onehot_seg_label)
+        zoomed_label = zoomed_label / tdu.seg_lens[:, None]
+        
+        frame_tgt = zoomed_label[:, sind]  # tdu_num_segs, num_matched
+        attn = attn[0, :, aind]  # tdu_num_segs, num_matched
+        attn_logp = torch.log_softmax(attn, dim=dim-1)
+        
+        loss = -attn_logp * frame_tgt
+        if self.sweight is not None:
+            loss = loss * self.sweight
+        
+        loss = loss.sum(1).sum() / zoomed_label.sum()
+        
+        return loss
+    
+    def frame_loss(self, frame_logit):
+        """
+        Multi-label BCE loss for frame predictions
+        
+        Args:
+            frame_logit: (T, num_labels) logits (already squeezed from T, 1, num_labels)
+        """
+        # Ensure proper shape - should be (T, num_labels)
+        if frame_logit.dim() == 3:
+            frame_logit = frame_logit.squeeze(1)  # (T, num_labels)
+        target = self.multilabel.float()
+        
+        # Binary cross entropy with logits
+        loss = F.binary_cross_entropy_with_logits(
+            frame_logit,
+            target,
+            pos_weight=self.label_weight
+        )
+        
+        return loss
+    
+    def segment_loss(self, seg_logit, tdu):
+        """
+        Multi-label BCE loss for segment predictions
+        
+        Args:
+            seg_logit: (num_segs, 1, num_labels) segment-level logits
+            tdu: TemporalDownsampleUpsample object with seg_label and seg_lens
+        """
+        # Squeeze batch dimension
+        if seg_logit.dim() == 3:
+            seg_logit = seg_logit.squeeze(1)  # (num_segs, num_labels)
+        
+        # Downsample frame-level labels to segment level
+        # For each TDU segment, compute average label
+        target = torch.zeros(tdu.num_seg, self.nclasses).to(seg_logit.device)
+        
+        for s in range(tdu.num_seg):
+            seg_mask = (tdu.seg_label == s)
+            if seg_mask.sum() > 0:
+                target[s] = self.multilabel[seg_mask].float().mean(0)
+        
+        # Binary cross entropy with logits
+        loss = F.binary_cross_entropy_with_logits(
+            seg_logit,
+            target,
+            pos_weight=self.label_weight
+        )
+        
+        return loss

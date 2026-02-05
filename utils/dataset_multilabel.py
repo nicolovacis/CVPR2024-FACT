@@ -140,6 +140,10 @@ def create_multilabel_dataset(cfg: CfgNode):
     - mapping.txt: "0 label_name_0\n1 label_name_1\n..."
     """
     
+    print("\n" + "="*80)
+    print("DEBUG: Starting create_multilabel_dataset")
+    print("="*80)
+    
     map_fname = cfg.map_fname
     feature_path = cfg.feature_path
     groundTruth_path = cfg.groundTruth_path
@@ -150,14 +154,31 @@ def create_multilabel_dataset(cfg: CfgNode):
     # But we keep it as empty list for compatibility with evaluation code
     bg_class = []
     
-    print("Loading Multi-Label Dataset")
+    print(f"DEBUG: Checking paths...")
+    print(f"  map_fname: {map_fname}")
+    print(f"  feature_path: {feature_path}")
+    print(f"  groundTruth_path: {groundTruth_path}")
+    print(f"  train_split: {train_split_fname}")
+    print(f"  test_split: {test_split_fname}")
+    
+    # Check if files exist
+    print(f"\nDEBUG: File existence checks:")
+    print(f"  map_fname exists: {os.path.exists(map_fname)}")
+    print(f"  feature_path exists: {os.path.exists(feature_path)}")
+    print(f"  groundTruth_path exists: {os.path.exists(groundTruth_path)}")
+    print(f"  train_split exists: {os.path.exists(train_split_fname)}")
+    print(f"  test_split exists: {os.path.exists(test_split_fname)}")
+    
+    print("\nLoading Multi-Label Dataset")
     print("Loading Feature from", feature_path)
     print("Loading Label from", groundTruth_path)
 
+    print(f"\nDEBUG: Loading action mapping from {map_fname}")
     label2index, index2label = load_action_mapping(map_fname)
     nclasses = len(label2index)
     print(f"Number of label types: {nclasses}")
     print(f"Label names: {list(index2label.values())}")
+    print(f"DEBUG: Mapping loaded successfully\n")
 
     def load_video(vname):
         """
@@ -168,25 +189,32 @@ def create_multilabel_dataset(cfg: CfgNode):
             train_label: (T, num_labels) binary array for training
             eval_label: (T, num_labels) binary array for evaluation
         """
+        print(f"DEBUG: load_video called for {vname}")
         if vname.endswith('.txt'):
             vname = vname[:-4]
         
         # Load features
+        print(f"  Loading features...")
         feature = load_feature(feature_path, vname, feature_transpose)
+        print(f"  Feature shape: {feature.shape}")
         
         # Load multi-label ground truth from .npy file
         gt_label_file = os.path.join(groundTruth_path, vname + '.npy')
+        print(f"  Loading ground truth from {gt_label_file}")
         gt_label = np.load(gt_label_file)  # Shape: (T, num_labels)
+        print(f"  Ground truth shape: {gt_label.shape}")
         
         # Ensure compatibility
         if feature.shape[0] != gt_label.shape[0]:
             l = min(feature.shape[0], gt_label.shape[0])
             feature = feature[:l]
             gt_label = gt_label[:l]
+            print(f"  Adjusted to length {l}")
         
         # Downsample if necessary
         sr = cfg.sr
         if sr > 1:
+            print(f"  Downsampling with sr={sr}")
             feature = feature[::sr]
             # For multi-label, downsample by taking max over window
             gt_label_sampled = []
@@ -198,20 +226,30 @@ def create_multilabel_dataset(cfg: CfgNode):
         else:
             gt_label_sampled = gt_label
         
+        print(f"  Video loaded successfully: feature {feature.shape}, label {gt_label_sampled.shape}")
         return feature, gt_label_sampled, gt_label
 
     # Load test dataset
+    print(f"\nDEBUG: Loading test split from {test_split_fname}")
     with open(test_split_fname, 'r') as f:
         test_video_list = f.read().split('\n')[0:-1]
+    print(f"DEBUG: Found {len(test_video_list)} test videos")
+    print(f"DEBUG: Creating test dataset (this will load first video)...")
     test_dataset = MultiLabelDataset(test_video_list, nclasses, load_video, bg_class)
+    print(f"DEBUG: Test dataset created: {test_dataset}")
 
     # Load train dataset
     if cfg.aux.debug:
+        print(f"DEBUG: Debug mode - using test dataset for training")
         dataset = test_dataset
     else:
+        print(f"\nDEBUG: Loading train split from {train_split_fname}")
         with open(train_split_fname, 'r') as f:
             video_list = f.read().split('\n')[0:-1]
+        print(f"DEBUG: Found {len(video_list)} train videos")
+        print(f"DEBUG: Creating train dataset (this will load first video)...")
         dataset = MultiLabelDataset(video_list, nclasses, load_video, bg_class)
+        print(f"DEBUG: Train dataset created: {dataset}")
     
     # Add metadata
     dataset.label2index = label2index
@@ -219,4 +257,9 @@ def create_multilabel_dataset(cfg: CfgNode):
     test_dataset.label2index = label2index
     test_dataset.index2label = index2label
 
+    print(f"\nDEBUG: Dataset creation complete!")
+    print(f"  Train dataset: {dataset}")
+    print(f"  Test dataset: {test_dataset}")
+    print("="*80 + "\n")
+    
     return dataset, test_dataset

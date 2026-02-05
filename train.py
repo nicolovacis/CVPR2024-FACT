@@ -125,6 +125,10 @@ if __name__ == '__main__':
     # MULTILABEL SUPPORT: Check dataset type and load accordingly
     is_multilabel = (cfg.dataset == 'stanford_multilabel')
     
+    print("\n" + "="*80)
+    print(f"DEBUG: Starting dataset loading (is_multilabel={is_multilabel})")
+    print("="*80)
+    
     if is_multilabel:
         print("\n" + "="*80)
         print("LOADING MULTI-LABEL DATASET")
@@ -135,6 +139,10 @@ if __name__ == '__main__':
         from .utils.dataset import DataLoader, create_dataset
         dataset, test_dataset = create_dataset(cfg)
     
+    print("\n" + "="*80)
+    print("DEBUG: Dataset loaded, creating dataloaders...")
+    print("="*80)
+    
     if not cfg.aux.debug:
         trainloader = DataLoader(dataset, batch_size=cfg.batch_size, shuffle=True)
     else:
@@ -142,20 +150,32 @@ if __name__ == '__main__':
     testloader = DataLoader(test_dataset, batch_size=cfg.batch_size, shuffle=False)
     print('Train dataset', dataset)
     print('Test dataset ', test_dataset)
+    print("DEBUG: Dataloaders created\n")
 
     ### create network #########################################################
+    print("\n" + "="*80)
+    print("DEBUG: Creating network...")
+    print("="*80)
+    
     if cfg.dataset == 'epic':
         from .models.blocks_SepVerbNoun import FACT
         net = FACT(cfg, dataset.input_dimension, 98, 301)
     elif is_multilabel:
         from .models.blocks_multilabel import FACT
+        print(f"DEBUG: Loading FACT multilabel model with {dataset.nclasses} labels")
         net = FACT(cfg, dataset.input_dimension, dataset.nclasses)
         print(f"Multi-label model: {dataset.nclasses} independent labels")
     else:
         from .models.blocks import FACT
         net = FACT(cfg, dataset.input_dimension, dataset.nclasses)
 
+    print("DEBUG: Network created\n")
+    
     # MULTILABEL SUPPORT: Use appropriate criterion
+    print("="*80)
+    print("DEBUG: Creating loss criterion...")
+    print("="*80)
+    
     if is_multilabel:
         from .models.loss_multilabel import MultiLabelMatchCriterion
         net.mcriterion = MultiLabelMatchCriterion(cfg, dataset.nclasses, dataset.bg_class)
@@ -166,13 +186,26 @@ if __name__ == '__main__':
             compute_null_weight(cfg, dataset)
         net.mcriterion = MatchCriterion(cfg, dataset.nclasses, dataset.bg_class)
 
+    print("DEBUG: Loss criterion created\n")
+
+    print("="*80)
+    print("DEBUG: Checking for checkpoint to resume...")
+    print("="*80)
+    
     global_step, ckpt_file = resume_ckpt(cfg, logdir)
     if ckpt_file is not None:
+        print(f"DEBUG: Loading checkpoint from {ckpt_file}")
         ckpt = torch.load(ckpt_file, map_location="cpu")
         if 'frame_pe.pe' in ckpt: del ckpt['frame_pe.pe']
         if 'action_pe.pe' in ckpt: del ckpt['action_pe.pe']
         net.load_state_dict(ckpt, strict=False)
+        print(f"DEBUG: Checkpoint loaded, resuming from step {global_step}")
+    else:
+        print("DEBUG: No checkpoint found, starting from scratch")
+    
+    print("\nDEBUG: Moving network to CUDA...")
     net.cuda()
+    print("DEBUG: Network on CUDA\n")
 
     print(net)
 
@@ -188,6 +221,14 @@ if __name__ == '__main__':
     ckpt = Checkpoint(-1, bg_class=([] if net.cfg.eval_bg else testloader.dataset.bg_class), eval_edit=False)
     best_ckpt, best_metric = None, 0
 
+    print("\n" + "="*80)
+    print(f"DEBUG: TRAINING LOOP STARTING")
+    print(f"  Start epoch: {start_epoch}")
+    print(f"  Total epochs: {cfg.epoch}")
+    print(f"  Batches per epoch: {len(trainloader)}")
+    print(f"  Global step: {global_step}")
+    print("="*80 + "\n")
+    
     print(f'Start Training from Epoch {start_epoch}...')
     for eidx in range(start_epoch, cfg.epoch):
 
